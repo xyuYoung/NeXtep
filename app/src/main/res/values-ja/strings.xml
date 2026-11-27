@@ -49,6 +49,10 @@
     <string name="key_trigger_mode_long">長押し</string>
     <string name="key_trigger_blacklist_title">キー除外アプリ</string>
     <string name="key_trigger_blacklist_summary">選択したアプリの表示中はキーでワークスペースを開きません。</string>
+    <string name="control_position_title">アプリバーの位置</string>
+    <string name="control_position_summary">アプリバーと操作エリアを上端またはアプリウィンドウの下に配置します。</string>
+    <string name="control_position_top">上</string>
+    <string name="control_position_bottom">下</string>
     <string name="show_seconds">秒を表示</string>
     <string name="content_icon">アイコン</string>
     <string name="content_time">時刻</string>

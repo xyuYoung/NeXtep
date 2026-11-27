@@ -49,6 +49,10 @@
     <string name="key_trigger_mode_long">長按</string>
     <string name="key_trigger_blacklist_title">按鍵黑名單</string>
     <string name="key_trigger_blacklist_summary">以下應用程式處於前景時，按鍵不會觸發開啟工作台。</string>
+    <string name="control_position_title">App 欄位置</string>
+    <string name="control_position_summary">選擇將 App 圖示與控制欄置於頂部或開啟的應用程式視窗下方。</string>
+    <string name="control_position_top">頂部</string>
+    <string name="control_position_bottom">底部</string>
     <string name="show_seconds">顯示秒</string>
     <string name="content_icon">圖示</string>
     <string name="content_time">時間</string>

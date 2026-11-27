@@ -29,6 +29,7 @@ class SettingsRepository(private val context: Context) {
         val monitorItems: List<String> = WorkspaceMetric.defaultSlots,
         val monitorHidden: Boolean = false,
         val windowCornerRadiusDp: Int = WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP,
+        val controlAtBottom: Boolean = false,
     )
 
     fun topBarSettings(): TopBarSettings = TopBarSettings(
@@ -74,7 +75,13 @@ class SettingsRepository(private val context: Context) {
         windowCornerRadiusDp = WorkspaceConfigContract.normalizeWindowCornerRadiusDp(
             preferences.getInt(KEY_WINDOW_CORNER_RADIUS_DP, WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP),
         ),
+        controlAtBottom = preferences.getBoolean(KEY_CONTROL_AT_BOTTOM, false),
     )
+
+    fun setControlAtBottom(atBottom: Boolean) {
+        preferences.edit().putBoolean(KEY_CONTROL_AT_BOTTOM, atBottom).apply()
+        notifyTopContentChanged()
+    }
 
     fun setWindowCornerRadiusDp(radiusDp: Int) {
         preferences.edit().putInt(
@@ -229,6 +236,7 @@ class SettingsRepository(private val context: Context) {
         const val KEY_TRIGGER_BLACKLIST = "key_trigger_blacklist"
         const val KEY_RETURN_AFTER_SHARING_ENABLED = "return_after_sharing_enabled"
         const val KEY_WINDOW_CORNER_RADIUS_DP = "window_corner_radius_dp"
+        const val KEY_CONTROL_AT_BOTTOM = "control_at_bottom"
         const val DEFAULT_TOP_TITLE = ""
         const val COMPONENT_SEPARATOR = "\n"
         const val MAX_TOP_APPS = 36

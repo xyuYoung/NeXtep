@@ -94,6 +94,7 @@ object SystemUiRuntime {
                     windowController.setSlotBackgroundSwipeEnabled(workspaceConfig.slotBackgroundSwipeEnabled)
                     windowController.setNavigationButtonsEnabled(workspaceConfig.navigationButtonsEnabled)
                     windowController.setWindowCornerRadiusDp(workspaceConfig.windowCornerRadiusDp)
+                    windowController.setControlAtBottom(workspaceConfig.controlAtBottom)
                 }
                 if (::workspaceController.isInitialized && workspaceController.isActive() &&
                     !workspaceController.isSuspended()

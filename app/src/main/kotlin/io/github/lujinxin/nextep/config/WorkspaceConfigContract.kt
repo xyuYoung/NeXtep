@@ -38,6 +38,7 @@ data class WorkspaceTopConfig(
     val returnAfterSharingEnabled: Boolean = WorkspaceConfigContract.DEFAULT_RETURN_AFTER_SHARING_ENABLED,
     val monitorItems: List<String> = WorkspaceMetric.defaultSlots,
     val windowCornerRadiusDp: Int = WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP,
+    val controlAtBottom: Boolean = false,
 )
 
 object WorkspaceConfigContract {
@@ -72,6 +73,7 @@ object WorkspaceConfigContract {
     const val EXTRA_NAVIGATION_BUTTONS_ENABLED = "io.github.lujinxin.nextep.extra.NAVIGATION_BUTTONS_ENABLED"
     const val EXTRA_SWAP_ANIMATION_DURATION_MS = "io.github.lujinxin.nextep.extra.SWAP_ANIMATION_DURATION_MS"
     const val EXTRA_WINDOW_CORNER_RADIUS_DP = "io.github.lujinxin.nextep.extra.WINDOW_CORNER_RADIUS_DP"
+    const val EXTRA_CONTROL_AT_BOTTOM = "io.github.lujinxin.nextep.extra.CONTROL_AT_BOTTOM"
     const val EXTRA_LANGUAGE_TAG = "io.github.lujinxin.nextep.extra.LANGUAGE_TAG"
     const val MIN_SWAP_ANIMATION_DURATION_MS = 100
     const val MAX_SWAP_ANIMATION_DURATION_MS = 1_000
@@ -141,6 +143,7 @@ class WorkspaceConfigReceiver : BroadcastReceiver() {
                 putBoolean(WorkspaceConfigContract.EXTRA_NAVIGATION_BUTTONS_ENABLED, settings.navigationButtonsEnabled)
                 putInt(WorkspaceConfigContract.EXTRA_SWAP_ANIMATION_DURATION_MS, settings.swapAnimationDurationMs)
                 putInt(WorkspaceConfigContract.EXTRA_WINDOW_CORNER_RADIUS_DP, settings.windowCornerRadiusDp)
+                putBoolean(WorkspaceConfigContract.EXTRA_CONTROL_AT_BOTTOM, settings.controlAtBottom)
                 putString(WorkspaceConfigContract.EXTRA_LANGUAGE_TAG, AppLanguage.selectedTag(context))
                 putStringArrayList(
                     WorkspaceConfigContract.EXTRA_APPS,
@@ -309,6 +312,7 @@ object WorkspaceConfigClient {
                     WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP,
                 ),
             ),
+            controlAtBottom = extras.getBoolean(WorkspaceConfigContract.EXTRA_CONTROL_AT_BOTTOM, false),
         )
     }
 

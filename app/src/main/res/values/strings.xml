@@ -57,6 +57,10 @@
     <string name="key_trigger_mode_long">Long press</string>
     <string name="key_trigger_blacklist_title">Key trigger blacklist</string>
     <string name="key_trigger_blacklist_summary">Do not open the workspace with the hardware key while a selected app is in the foreground.</string>
+    <string name="control_position_title">App bar position</string>
+    <string name="control_position_summary">Choose whether the app bar and controls sit at the top or below the open app window.</string>
+    <string name="control_position_top">Top</string>
+    <string name="control_position_bottom">Bottom</string>
     <string name="show_seconds">Show seconds</string>
     <string name="content_icon">Icon</string>
     <string name="content_time">Time</string>

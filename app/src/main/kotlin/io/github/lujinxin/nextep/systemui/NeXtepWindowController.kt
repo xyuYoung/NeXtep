@@ -58,6 +58,7 @@ class NeXtepWindowController(
     private var slotBackgroundSwipeEnabled = true
     private var frostStrength = 50
     private var windowCornerRadiusDp = io.github.lujinxin.nextep.config.WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP
+    private var controlAtBottom = false
     private val swapAnimator = WorkspaceSwapAnimator(context)
     private val internalDrag = WorkspaceInternalDragController(
         context, ::geometry, { slotWindows.map { it.view } },
@@ -238,6 +239,7 @@ class NeXtepWindowController(
         check(records.size == EXPECTED_WINDOW_COUNT) { "SystemUI windows are unavailable" }
         workspaceVisible = true
         reconfigure().getOrThrow()
+        val enterDirection = if (controlAtBottom) 1f else -1f
         records.forEach { record ->
             val view = record.view
             view.animate().cancel()
@@ -245,8 +247,8 @@ class NeXtepWindowController(
             view.translationX = 0f
             view.alpha = 0f
             view.translationY = when (record.title) {
-                "NeXtepTopBar" -> -dp(ENTER_OFFSET_DP)
-                else -> dp(ENTER_OFFSET_DP)
+                "NeXtepTopBar" -> enterDirection * dp(ENTER_OFFSET_DP)
+                else -> -enterDirection * dp(ENTER_OFFSET_DP)
             }
             view.animate()
                 .alpha(1f)
@@ -276,6 +278,7 @@ class NeXtepWindowController(
         slotCoordinator?.deactivate()
         topAppStrip?.setWorkspaceVisible(false)
         controlAreaPager?.setWorkspaceState(visible = false, locked = false)
+        val exitDirection = if (controlAtBottom) 1f else -1f
         records.forEach { record ->
             val view = record.view
             view.animate().cancel()
@@ -285,8 +288,8 @@ class NeXtepWindowController(
             view.animate()
                 .alpha(0f)
                 .translationY(
-                    if (record.title == "NeXtepTopBar") -dp(EXIT_OFFSET_DP)
-                    else dp(EXIT_OFFSET_DP),
+                    if (record.title == "NeXtepTopBar") exitDirection * dp(EXIT_OFFSET_DP)
+                    else -exitDirection * dp(EXIT_OFFSET_DP),
                 )
                 .setDuration(WORKSPACE_EXIT_DURATION_MS)
                 .setInterpolator(transitionInterpolator)
@@ -376,6 +379,13 @@ class NeXtepWindowController(
         val radiusPx = dp(normalized)
         slotWindows.forEach { it.view.setCornerRadiusPx(radiusPx) }
         sidebarView?.invalidate()
+    }
+
+    fun setControlAtBottom(atBottom: Boolean) {
+        if (controlAtBottom == atBottom) return
+        controlAtBottom = atBottom
+        controlAreaPager?.setControlAtBottom(atBottom)
+        viewport.setControlAtBottom(atBottom)
     }
 
     fun reconfigure(rotationOnly: Boolean = false): Result<WorkspaceGeometry> = runCatching {
@@ -498,7 +508,10 @@ class NeXtepWindowController(
                         visibleSlotTaskIds() + listOfNotNull(taskRepository.foregroundTask()?.taskId)
                     },
                     onFloatingPipBoundsChanged = ::setFloatingPipBounds,
-                ).also { controlAreaPager = it }
+                ).also {
+                    it.setControlAtBottom(controlAtBottom)
+                    controlAreaPager = it
+                }
             },
             width = geometry.screenWidth,
             height = geometry.topHeight,

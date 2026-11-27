@@ -103,6 +103,16 @@ internal class ControlAreaPager(
         requestLayout()
     }
 
+    fun setControlAtBottom(atBottom: Boolean) {
+        functions.setControlAtBottom(atBottom)
+        val params = boundaryDivider.layoutParams as? LayoutParams ?: return
+        val gravity = if (atBottom) Gravity.TOP else Gravity.BOTTOM
+        if (params.gravity != gravity) {
+            params.gravity = gravity
+            boundaryDivider.layoutParams = params
+        }
+    }
+
     override fun onPanelRotationChanged(rotationDegrees: Float) {
         video.setPanelRotation(rotationDegrees)
     }

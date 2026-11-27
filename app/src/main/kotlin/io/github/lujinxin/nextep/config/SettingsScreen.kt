@@ -78,6 +78,7 @@ object SettingsScreen {
             val keyTriggerKeyCodeButton = createKeyTriggerKeyCodeButton(activity, repository)
             val keyTriggerModeButton = createKeyTriggerModeButton(activity, repository)
             val keyTriggerBlacklistButton = createKeyTriggerBlacklistButton(activity, repository, apps)
+            val controlPositionButton = createControlPositionButton(activity, repository)
             val languageButton = SettingsRowButton.create(activity).apply {
                 text = languageLabels[AppLanguage.languageTags.indexOf(selectedLanguage).coerceAtLeast(0)]
                 contentDescription = activity.getString(R.string.setting_description,
@@ -135,6 +136,17 @@ object SettingsScreen {
                         keyTriggerBlacklistButton,
                     ).apply {
                         setOnClickListener { keyTriggerBlacklistButton.performClick() }
+                        isFocusable = false
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, matchWidth())
+                    addView(settingDivider(activity))
+                    addView(settingRow(
+                        activity,
+                        activity.getString(R.string.control_position_title),
+                        activity.getString(R.string.control_position_summary),
+                        controlPositionButton,
+                    ).apply {
+                        setOnClickListener { controlPositionButton.performClick() }
                         isFocusable = false
                         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                     }, matchWidth())
@@ -613,6 +625,38 @@ object SettingsScreen {
                 }
             }
             dialog.show()
+        }
+    }
+
+    private fun createControlPositionButton(
+        activity: AppCompatActivity,
+        repository: SettingsRepository,
+    ) = SettingsRowButton.create(activity).apply {
+        val options = listOf(
+            false to activity.getString(R.string.control_position_top),
+            true to activity.getString(R.string.control_position_bottom),
+        )
+        fun refreshLabel() {
+            val atBottom = repository.topBarSettings().controlAtBottom
+            text = options.first { it.first == atBottom }.second
+            contentDescription = activity.getString(
+                R.string.setting_description,
+                activity.getString(R.string.control_position_title),
+                text,
+            )
+        }
+        refreshLabel()
+        setOnClickListener {
+            val currentIndex = if (repository.topBarSettings().controlAtBottom) 1 else 0
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.control_position_title)
+                .setSingleChoiceItems(options.map { it.second }.toTypedArray(), currentIndex) { dialog, index ->
+                    dialog.dismiss()
+                    repository.setControlAtBottom(options[index].first)
+                    refreshLabel()
+                }
+                .setNegativeButton(R.string.action_cancel, null)
+                .show()
         }
     }
 

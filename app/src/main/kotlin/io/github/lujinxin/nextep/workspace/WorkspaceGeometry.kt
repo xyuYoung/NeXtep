@@ -18,11 +18,12 @@ data class WorkspaceGeometry(
     val sidebarSide: SidebarSide,
     val navigationInsets: WorkspaceNavigationInsets = WorkspaceNavigationInsets(),
     val displayRotation: Int = 0,
+    val controlAtBottom: Boolean = false,
 ) {
     val isLandscape: Boolean get() = screenWidth > screenHeight
     // Surface rotations are quarter turns from the phone's natural portrait axes.
-    // Keep controls at the physical phone top while the main app follows the display.
-    val isControlOnLeft: Boolean get() = isLandscape && displayRotation == 1
+    // Keep controls at the selected physical phone edge while the main app follows the display.
+    val isControlOnLeft: Boolean get() = isLandscape && ((displayRotation == 1) != controlAtBottom)
     val panelRotationDegrees: Float get() = if (!isLandscape) 0f else if (isControlOnLeft) -90f else 90f
     // Project the selected button's unchanged diagram into display coordinates.
     // Rotation never changes the selected layout or the diagram in panel axes.
@@ -57,16 +58,18 @@ data class WorkspaceGeometry(
     val controlWidth: Int get() = if (isLandscape) topHeight else availableWidth
     val controlHeight: Int get() = if (isLandscape) availableHeight else topHeight
     val controlLeft: Int get() = if (isLandscape && !isControlOnLeft) availableRight - topHeight else availableLeft
-    val controlTop: Int get() = availableTop
+    val controlTop: Int get() = if (!isLandscape && controlAtBottom) availableBottom - topHeight else availableTop
     val sidebarLeft: Int get() = if (isLandscape) contentLeft else if (sidebarSide == SidebarSide.LEFT) availableLeft else contentRight
-    val sidebarTop: Int get() = if (!isLandscape) availableTop + topHeight else
-        if (isSidebarAtTop) availableTop else availableBottom - sidebarWidth
+    val sidebarTop: Int get() = if (!isLandscape) {
+        if (controlAtBottom) availableTop else availableTop + topHeight
+    } else if (isSidebarAtTop) availableTop else availableBottom - sidebarWidth
     val sidebarPhysicalWidth: Int get() = if (isLandscape) contentWidth else sidebarWidth
     val sidebarPhysicalHeight: Int get() = if (isLandscape) sidebarWidth else contentHeight
     val sidebarLogicalHeight: Int get() = if (isLandscape) contentWidth else contentHeight
 
-    val contentTop: Int get() = availableTop + if (!isLandscape) topHeight else
-        if (isSidebarAtTop) sidebarWidth else 0
+    val contentTop: Int get() = availableTop + if (!isLandscape) {
+        if (controlAtBottom) 0 else topHeight
+    } else if (isSidebarAtTop) sidebarWidth else 0
     val contentBottom: Int get() = contentTop + contentHeight
 
     val contentWidth: Int
@@ -124,6 +127,8 @@ data class WorkspaceGeometry(
             density: Float,
             navigationInsets: WorkspaceNavigationInsets = WorkspaceNavigationInsets(),
             displayRotation: Int = 0,
+            controlAtBottom: Boolean = false,
+            compactControlHeightPx: Int? = null,
         ): WorkspaceGeometry {
             require(screenWidth > 1 && screenHeight > 1) { "Display dimensions must be usable" }
             require(density.isFinite() && density > 0f) { "Display density must be positive and finite" }
@@ -147,7 +152,10 @@ data class WorkspaceGeometry(
             val count = WORKSPACE_SLOT_COUNT
             val contentLongSide = (count * (shortSide - gap).toDouble() * longSide / shortSide +
                 (count - 1) * gap) / (count + 1)
-            val controlThickness = (longSide - contentLongSide).roundToInt().coerceIn(1, longSide - 1)
+            val defaultControlThickness = (longSide - contentLongSide).roundToInt().coerceIn(1, longSide - 1)
+            val controlThickness = compactControlHeightPx
+                ?.coerceIn((longSide * 0.10).roundToInt().coerceAtLeast(1), defaultControlThickness)
+                ?: defaultControlThickness
             val mainShortSide = (shortSide.toDouble() * (longSide - controlThickness) / longSide)
                 .roundToInt().coerceIn(1, shortSide - 1)
             return WorkspaceGeometry(
@@ -158,6 +166,7 @@ data class WorkspaceGeometry(
                 sidebarSide = sidebarSide,
                 navigationInsets = safeInsets,
                 displayRotation = displayRotation,
+                controlAtBottom = controlAtBottom,
             )
         }
     }

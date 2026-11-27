@@ -157,34 +157,65 @@ class TopAppStripView(
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
+    private var controlAtBottom = false
+    private val actionRowView: View = actionRow()
+    private val contentColumn = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+
     init {
         setBackgroundColor(Color.TRANSPARENT)
-        val topInset = compactStatusBarInset()
-        addView(
-            LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(8), 0, dp(8), dp(WorkspaceControlMetrics.APP_ICON_BOTTOM_INSET_DP))
-                addView(
-                    actionRow(),
-                    LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(WorkspaceControlMetrics.ACTION_HEIGHT_DP)),
-                )
-                addView(
-                    header,
-                    LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f),
-                )
-                addView(
-                    appScroll,
-                    LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(APP_TILE_HEIGHT_DP)),
-                )
-            },
-            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
-                topMargin = topInset
-            },
-        )
-        addView(dismissHint, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
-            topMargin = topInset
-        })
+        header.visibility = View.GONE
+        addView(contentColumn, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(dismissHint, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        applyControlBarPosition()
         updateSideButtons()
+    }
+
+    fun setControlAtBottom(atBottom: Boolean) {
+        if (controlAtBottom == atBottom) return
+        controlAtBottom = atBottom
+        applyControlBarPosition()
+    }
+
+    private fun applyControlBarPosition() {
+        val topInset = if (controlAtBottom) 0 else compactStatusBarInset()
+        contentColumn.removeAllViews()
+        if (controlAtBottom) {
+            contentColumn.setPadding(dp(8), dp(6), dp(8), dp(14))
+            contentColumn.addView(
+                appScroll,
+                LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(APP_TILE_HEIGHT_DP)),
+            )
+            contentColumn.addView(
+                actionRowView,
+                LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(WorkspaceControlMetrics.ACTION_HEIGHT_DP)).apply {
+                    topMargin = dp(4)
+                },
+            )
+        } else {
+            contentColumn.setPadding(dp(8), 0, dp(8), dp(WorkspaceControlMetrics.APP_ICON_BOTTOM_INSET_DP))
+            contentColumn.addView(
+                actionRowView,
+                LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(WorkspaceControlMetrics.ACTION_HEIGHT_DP)),
+            )
+            contentColumn.addView(
+                appScroll,
+                LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(APP_TILE_HEIGHT_DP)).apply {
+                    topMargin = dp(4)
+                },
+            )
+        }
+        (contentColumn.layoutParams as? LayoutParams)?.let { params ->
+            params.topMargin = topInset
+            contentColumn.layoutParams = params
+        }
+        (dismissHint.layoutParams as? LayoutParams)?.let { params ->
+            params.topMargin = topInset
+            dismissHint.layoutParams = params
+        }
+        requestLayout()
     }
 
     private fun compactStatusBarInset(): Int {
@@ -367,7 +398,7 @@ class TopAppStripView(
                     topConfig = config
                     updateTitle()
                     header.setItems(config.monitorItems)
-                    header.visibility = if (config.monitorItems.isEmpty()) View.GONE else View.VISIBLE
+                    header.visibility = View.GONE
                     result?.onSuccess { snapshot ->
                         refreshRetryCount = 0
                         lastRefreshAt = System.currentTimeMillis()

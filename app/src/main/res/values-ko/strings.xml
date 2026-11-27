@@ -49,6 +49,10 @@
     <string name="key_trigger_mode_long">길게 누르기</string>
     <string name="key_trigger_blacklist_title">키 트리거 제외 앱</string>
     <string name="key_trigger_blacklist_summary">선택한 앱이 화면에 있을 때는 키로 워크스페이스를 열지 않습니다.</string>
+    <string name="control_position_title">앱 바 위치</string>
+    <string name="control_position_summary">앱 아이콘과 제어 영역을 상단 또는 열린 앱 창 아래에 배치합니다.</string>
+    <string name="control_position_top">상단</string>
+    <string name="control_position_bottom">하단</string>
     <string name="show_seconds">초 표시</string>
     <string name="content_icon">아이콘</string>
     <string name="content_time">시간</string>

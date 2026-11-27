@@ -56,6 +56,7 @@ internal class WorkspaceViewport(
     }.onFailure { NeXtepLog.warn("workspace_viewport", "Viewport storage unavailable", it) }.getOrNull()
     private val handler = Handler(Looper.getMainLooper())
     private var navigationButtonsEnabled = preferences?.getBoolean(MODE_KEY, false) ?: false
+    private var controlAtBottom = preferences?.getBoolean(CONTROL_AT_BOTTOM_KEY, false) ?: false
     private var cached: Snapshot? = null
     private var cachedKey: String? = null
     private var profile: WorkspaceLayoutProfile? = null
@@ -123,6 +124,19 @@ internal class WorkspaceViewport(
         }
     }
 
+    fun setControlAtBottom(atBottom: Boolean) {
+        if (controlAtBottom == atBottom) return
+        controlAtBottom = atBottom
+        runCatching {
+            preferences?.edit()?.putBoolean(CONTROL_AT_BOTTOM_KEY, atBottom)?.apply()
+        }.onFailure { NeXtepLog.warn("workspace_viewport", "Unable to save control bar position", it) }
+        cachedKey = null
+        profile = null
+        refresh(forceMeasure = true)
+        handler.removeCallbacks(notifyChanged)
+        handler.post(notifyChanged)
+    }
+
     @Suppress("DEPRECATION")
     private fun refresh(forceMeasure: Boolean = false) {
         val metrics = context.resources.displayMetrics
@@ -136,10 +150,12 @@ internal class WorkspaceViewport(
         runCatching { display?.getRealSize(size) }
         val width = size.x
         val height = size.y
-        val prefix = if (navigationButtonsEnabled) BUTTONS_PREFIX else FULL_PREFIX
+        val modePrefix = if (navigationButtonsEnabled) BUTTONS_PREFIX else FULL_PREFIX
+        val prefix = "$modePrefix${if (controlAtBottom) "bottom:" else "top:"}"
         val previous = cached
         val recorded = profile
         if (!forceMeasure && previous != null && recorded != null &&
+            recorded.geometry.controlAtBottom == controlAtBottom &&
             previous.density == metrics.density &&
             minOf(previous.width, previous.height) == minOf(width, height) &&
             maxOf(previous.width, previous.height) == maxOf(width, height)
@@ -200,13 +216,33 @@ internal class WorkspaceViewport(
     }
 
     private fun updateSnapshot(snapshot: Snapshot, key: String?, saved: WorkspaceLayoutProfile? = null) {
-        if (cached != snapshot || profile == null) {
-            profile = saved ?: WorkspaceLayoutProfile.create(snapshot.width, snapshot.height,
-                (snapshot.density * 160).roundToInt(), snapshot.navigationInsets, snapshot.displayRotation)
+        if (cached != snapshot || profile == null || profile?.geometry?.controlAtBottom != controlAtBottom) {
+            profile = saved ?: WorkspaceLayoutProfile.create(
+                snapshot.width,
+                snapshot.height,
+                (snapshot.density * 160).roundToInt(),
+                snapshot.navigationInsets,
+                snapshot.displayRotation,
+                controlAtBottom = controlAtBottom,
+                compactControlHeightPx = compactControlHeightPx(snapshot.density, controlAtBottom),
+            )
             SystemServerWorkspaceBridge.publishLayout(context, checkNotNull(profile))
         }
         cached = snapshot
         cachedKey = key
+    }
+
+    private fun compactControlHeightPx(density: Float, atBottom: Boolean): Int {
+        fun dp(value: Int) = (value * density).roundToInt()
+        if (atBottom) {
+            // Compact bottom bar: top pad (8dp) + app icons (44dp) + gap (4dp) + action row (48dp) + bottom pad (16dp)
+            return dp(120)
+        }
+        val resId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBarPx = if (resId > 0) context.resources.getDimensionPixelSize(resId) else dp(24)
+        val clampedStatusBar = statusBarPx.coerceIn(dp(8), dp(32))
+        // Compact top bar: status bar + action row (48dp) + gap (4dp) + app icons (44dp) + bottom pad (8dp)
+        return clampedStatusBar + dp(104)
     }
 
     private fun saveSnapshot(key: String) {
@@ -222,8 +258,9 @@ internal class WorkspaceViewport(
 
     private companion object {
         const val MODE_KEY = "navigation_buttons_enabled"
-        const val BUTTONS_PREFIX = "buttons_v1:"
-        const val FULL_PREFIX = "full_v1:"
+        const val CONTROL_AT_BOTTOM_KEY = "control_at_bottom"
+        const val BUTTONS_PREFIX = "buttons_v2:"
+        const val FULL_PREFIX = "full_v2:"
         const val MAX_PROFILES = 16
     }
 }
