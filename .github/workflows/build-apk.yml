@@ -1,0 +1,143 @@
+name: Build NeXtep APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run unit tests before building APK"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Debug & Release APKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Configure Android SDK and accept licenses
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_ROOT" > local.properties
+
+          SDKMANAGER=""
+          for candidate in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/bin/sdkmanager" \
+            "$SDK_ROOT/tools/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER="$candidate"
+              break
+            fi
+          done
+
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            "$SDKMANAGER" --install \
+              "platform-tools" \
+              "platforms;android-36" \
+              "build-tools;36.0.0" || true
+            "$SDKMANAGER" --install "platforms;android-36.1" || true
+          fi
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Sign Release APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          mkdir -p out-apks
+          cp app/build/outputs/apk/debug/*.apk out-apks/
+
+          UNSIGNED_APK=$(ls app/build/outputs/apk/release/*-unsigned.apk 2>/dev/null | head -n 1 || true)
+          if [ -z "$UNSIGNED_APK" ]; then
+            cp app/build/outputs/apk/release/*.apk out-apks/
+            exit 0
+          fi
+
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS_DIR=$(ls -d "$SDK_ROOT"/build-tools/* | sort -V | tail -n 1)
+          ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+
+          ALIGNED_APK="out-apks/NeXtep-release-aligned.apk"
+          SIGNED_APK="out-apks/NeXtep-release-signed.apk"
+          "$ZIPALIGN" -f -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+            "$APKSIGNER" sign \
+              --ks release.jks \
+              --ks-pass "pass:$KEYSTORE_PASSWORD" \
+              --ks-key-alias "$KEY_ALIAS" \
+              --key-pass "pass:${KEY_PASSWORD:-$KEYSTORE_PASSWORD}" \
+              --out "$SIGNED_APK" \
+              "$ALIGNED_APK"
+            rm -f release.jks
+          else
+            # Fallback to an ad-hoc signing key so the artifact is directly installable
+            keytool -genkeypair -v \
+              -keystore temp-release.jks \
+              -storepass nextep123 \
+              -alias nextep \
+              -keypass nextep123 \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=NeXtep Custom, OU=CI, O=NeXtep, L=Local, S=Local, C=US"
+            "$APKSIGNER" sign \
+              --ks temp-release.jks \
+              --ks-pass pass:nextep123 \
+              --ks-key-alias nextep \
+              --key-pass pass:nextep123 \
+              --out "$SIGNED_APK" \
+              "$ALIGNED_APK"
+            rm -f temp-release.jks
+          fi
+
+          rm -f "$ALIGNED_APK"
+          "$APKSIGNER" verify --verbose "$SIGNED_APK"
+          ls -lh out-apks/
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeXtep-APKs
+          path: out-apks/*.apk
+          if-no-files-found: error
+          retention-days: 30

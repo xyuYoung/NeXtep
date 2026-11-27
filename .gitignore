@@ -1,0 +1,54 @@
+# IDE and machine-local settings
+.idea/
+*.iml
+.gradle/
+.kotlin/
+local.properties
+.DS_Store
+Thumbs.db
+
+# Build and diagnostic output
+build/
+/app/release/
+captures/
+diagnostics/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.apks
+*.hprof
+*.log
+
+# Local analysis and development evidence
+artifacts/
+IconDesign/
+graphify-out/
+.codegraph/
+.memorax-code/
+
+# Keep public documentation and diagram sources; leave other notes local
+docs/*.md
+!docs/BUILDING.md
+!docs/ARCHITECTURE.md
+docs/architecture/*
+!docs/architecture/nextep-architecture.json
+!docs/architecture/nextep-architecture.html
+design-qa.md
+Tech_Spec.md
+
+# Local development, device probing, and regression helpers
+scripts/
+
+# Signing material and environment files
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+*.pem
+keystore.properties
+.repo_memory/

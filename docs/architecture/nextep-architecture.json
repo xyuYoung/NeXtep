@@ -1,0 +1,926 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "NeXtep 2.2.0 项目架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "docs/architecture/nextep-architecture.html",
+    "repository": {
+      "url": "https://github.com/lujinxin/NeXtep.git",
+      "revision": "835ca6f345b88887c6509c928b2bd8c30cede4e3"
+    },
+    "views": [
+      {
+        "id": "control",
+        "label": "工作区与手势",
+        "focus": [
+          "entry",
+          "apk",
+          "gesture",
+          "runtime",
+          "windows"
+        ],
+        "note": "四指由 system_server 识别，由 SystemUI 校验游戏、黑名单和屏幕状态后决定是否执行。"
+      },
+      {
+        "id": "configuration",
+        "label": "配置与缓存",
+        "focus": [
+          "config",
+          "runtime",
+          "shared"
+        ],
+        "note": "配置优先 Binder，回退已验证快照及有序广播；Settings.Global 只共享工作区状态与布局。"
+      },
+      {
+        "id": "presentation",
+        "label": "任务、分享与视频",
+        "focus": [
+          "windows",
+          "main",
+          "slots",
+          "video",
+          "video-dock",
+          "android"
+        ],
+        "note": "屏幕上方以任务、功能、视频分页。功能页承载监测和游戏，主窗与已有小窗之间可拖拽分享。"
+      },
+      {
+        "id": "energy",
+        "label": "按需能耗诊断",
+        "focus": [
+          "config",
+          "energy",
+          "runtime",
+          "android"
+        ],
+        "note": "页面可见且解锁时每 5 秒采样；整机电池与共享 SystemUI 负载不能归因为模块独立功耗。"
+      },
+      {
+        "id": "hosts",
+        "label": "宿主协作",
+        "focus": [
+          "shared",
+          "launcher",
+          "assistant",
+          "multiapp",
+          "server"
+        ],
+        "note": "桌面、负一屏、分身与 system_server 保持独立进程边界；锁屏挂起，解锁后恢复。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "entry",
+      "type": "external",
+      "label": "工作区入口",
+      "sublabel": "快捷开关 · 手势 · 外部命令",
+      "pos": [
+        40,
+        80
+      ],
+      "size": [
+        180,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemserver/FourFingerGestureHook.kt",
+          "line": 64,
+          "end_line": 103,
+          "label": "四指触摸与有序确认"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/SystemUiRuntime.kt",
+          "line": 320,
+          "end_line": 327,
+          "label": "状态栏手势"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/config/AdvancedScreen.kt",
+          "line": 34,
+          "end_line": 40,
+          "label": "外部命令"
+        }
+      ]
+    },
+    {
+      "id": "apk",
+      "type": "messagebus",
+      "label": "触发协调",
+      "sublabel": "TriggerCoordinator · Broker",
+      "pos": [
+        317,
+        80
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/trigger/TriggerCoordinator.kt",
+          "line": 23,
+          "end_line": 88,
+          "label": "查询、切换与回滚"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/trigger/TriggerCoordinator.kt",
+          "line": 130,
+          "end_line": 165,
+          "label": "显式状态设置"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/trigger/WorkspaceControlBrokerReceiver.kt",
+          "line": 9,
+          "end_line": 34,
+          "label": "受保护的外部请求"
+        }
+      ]
+    },
+    {
+      "id": "config",
+      "type": "frontend",
+      "label": "设置与配置服务",
+      "sublabel": "监测布局 · 配置服务 · 诊断",
+      "pos": [
+        317,
+        260
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/config/SettingsRepository.kt",
+          "line": 64,
+          "end_line": 76,
+          "label": "监测项目读写与通知"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/config/AdvancedScreen.kt",
+          "line": 48,
+          "end_line": 70,
+          "label": "打开能耗监测页面"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/config/WorkspaceConfigContract.kt",
+          "line": 120,
+          "end_line": 165,
+          "label": "配置查询与回退"
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "SystemUI 工作区协调",
+      "sublabel": "游戏/黑名单 · 状态与恢复",
+      "pos": [
+        644,
+        80
+      ],
+      "size": [
+        210,
+        100
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/SystemUiRuntime.kt",
+          "line": 100,
+          "end_line": 277,
+          "label": "生命周期、手势装配与诊断应答"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/FourFingerGestureController.kt",
+          "line": 39,
+          "end_line": 83,
+          "label": "游戏黑名单与屏幕策略校验"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/config/WorkspaceConfigContract.kt",
+          "line": 120,
+          "end_line": 165,
+          "label": "Binder、快照与广播回退"
+        }
+      ]
+    },
+    {
+      "id": "windows",
+      "type": "frontend",
+      "label": "工作区窗口与交互",
+      "sublabel": "监测与游戏 · 最近任务",
+      "pos": [
+        960,
+        80
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/WorkspaceHeaderPager.kt",
+          "line": 30,
+          "end_line": 104,
+          "label": "顶部监测、游戏与滑动切换"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/WorkspaceMonitorView.kt",
+          "line": 110,
+          "end_line": 145,
+          "label": "只在面板可见时采样"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/RecentTasksView.kt",
+          "line": 506,
+          "end_line": 547,
+          "label": "恢复任务、拖入小窗与后台锁定"
+        }
+      ]
+    },
+    {
+      "id": "main",
+      "type": "backend",
+      "label": "主窗口呈现",
+      "sublabel": "Display 0 · 主应用方向",
+      "pos": [
+        644,
+        300
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/task/MainTaskPresentationCoordinator.kt",
+          "line": 22,
+          "end_line": 86,
+          "label": "区分桌面与普通应用"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/task/SurfaceTaskPresenter.kt",
+          "line": 5,
+          "end_line": 18,
+          "label": "任务 Surface 呈现"
+        }
+      ]
+    },
+    {
+      "id": "slots",
+      "type": "backend",
+      "label": "三个实时小窗",
+      "sublabel": "任务交换 · 拖拽分享 · 60Hz",
+      "pos": [
+        960,
+        300
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/display/SlotTaskCoordinator.kt",
+          "line": 799,
+          "end_line": 850,
+          "label": "拖拽分享与任务交换"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/display/VirtualDisplayFactory.kt",
+          "line": 14,
+          "end_line": 29,
+          "label": "请求 60Hz 虚拟显示"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/display/WorkspaceRefreshPolicy.kt",
+          "line": 3,
+          "end_line": 19,
+          "label": "任务变化快速恢复与空闲降频"
+        }
+      ]
+    },
+    {
+      "id": "shared",
+      "type": "database",
+      "label": "共享工作区状态",
+      "sublabel": "Settings.Global · 状态 / 布局",
+      "pos": [
+        644,
+        630
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/workspace/SystemServerWorkspaceBridge.kt",
+          "line": 23,
+          "end_line": 40,
+          "label": "观察布局变更"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/workspace/SystemServerWorkspaceBridge.kt",
+          "line": 45,
+          "end_line": 69,
+          "label": "发布布局和活动状态"
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "type": "backend",
+      "label": "负一屏适配",
+      "sublabel": "com.coloros.assistantscreen",
+      "pos": [
+        960,
+        960
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/launcher/ColorOsLauncherHook.kt",
+          "line": 132,
+          "end_line": 133,
+          "label": "独立宿主入口"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/launcher/ColorOsLauncherHook.kt",
+          "line": 187,
+          "end_line": 197,
+          "label": "按共享状态适配窗口"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/launcher/ColorOsLauncherHook.kt",
+          "line": 295,
+          "end_line": 321,
+          "label": "窗口附着与输入映射"
+        }
+      ]
+    },
+    {
+      "id": "launcher",
+      "type": "backend",
+      "label": "原生桌面协作",
+      "sublabel": "返回动效 · 原生后台锁定",
+      "pos": [
+        317,
+        960
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/launcher/ColorOsHomeReturnTargetHook.kt",
+          "line": 19,
+          "end_line": 65,
+          "label": "转换返回桌面的图标坐标"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/launcher/ColorOsRecentTaskLocks.kt",
+          "line": 64,
+          "end_line": 97,
+          "label": "处理原生后台锁定与清理"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/launcher/ColorOsLauncherHook.kt",
+          "line": 225,
+          "end_line": 236,
+          "label": "启动重定向"
+        }
+      ]
+    },
+    {
+      "id": "multiapp",
+      "type": "backend",
+      "label": "系统分身定向启动",
+      "sublabel": "com.oplus.multiapp",
+      "pos": [
+        644,
+        960
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/xposed/NeXtepHookEntry.kt",
+          "line": 57,
+          "end_line": 63,
+          "label": "分身进程分派"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/multiapp/OplusMultiAppHook.kt",
+          "line": 12,
+          "end_line": 64,
+          "label": "分身解析器适配"
+        }
+      ]
+    },
+    {
+      "id": "server",
+      "type": "security",
+      "label": "窗口与显示策略",
+      "sublabel": "输入法 · 导航 · 面板原生旋转",
+      "pos": [
+        40,
+        740
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemserver/SystemServerHook.kt",
+          "line": 22,
+          "end_line": 93,
+          "label": "系统服务适配入口"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemserver/WorkspacePanelRotationHook.kt",
+          "line": 9,
+          "end_line": 47,
+          "label": "限定 NeXtep 面板的无缝旋转"
+        }
+      ]
+    },
+    {
+      "id": "android",
+      "type": "external",
+      "label": "Android 系统 API",
+      "sublabel": "任务 · 图形 · 电池与热状态",
+      "pos": [
+        960,
+        740
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/framework/ActivityTaskManagerCompat.kt",
+          "line": 7,
+          "label": "任务 API"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/framework/TaskSurfaceCompat.kt",
+          "line": 231,
+          "label": "Surface 呈现"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/monitoring/BatterySample.kt",
+          "line": 31,
+          "end_line": 52,
+          "label": "系统电池与热状态读数"
+        }
+      ]
+    },
+    {
+      "id": "energy",
+      "type": "frontend",
+      "label": "能耗监测页面",
+      "sublabel": "可见且解锁 · 5 秒采样",
+      "pos": [
+        317,
+        440
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/config/EnergyMonitorActivity.kt",
+          "line": 150,
+          "end_line": 238,
+          "label": "页面采样、停采与诊断查询"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/monitoring/BatterySample.kt",
+          "line": 10,
+          "end_line": 52,
+          "label": "整机电池读数与净功率"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/monitoring/WorkspaceEnergyContract.kt",
+          "line": 12,
+          "end_line": 67,
+          "label": "签名保护的只读诊断协议"
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "type": "frontend",
+      "label": "控制区视频界面",
+      "sublabel": "独立转向 · 进度与全屏",
+      "pos": [
+        960,
+        520
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemui/ControlAreaVideoView.kt",
+          "line": 130,
+          "end_line": 163,
+          "label": "全屏和进度控制"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/workspace/ControlAreaVideoGeometry.kt",
+          "line": 19,
+          "end_line": 44,
+          "label": "独立画布与等比显示几何"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/workspace/ControlAreaVideoContract.kt",
+          "line": 40,
+          "end_line": 67,
+          "label": "宿主与控制命令协议"
+        }
+      ]
+    },
+    {
+      "id": "gesture",
+      "type": "backend",
+      "label": "四指手势观察",
+      "sublabel": "WM 触摸观察 · 有序确认",
+      "pos": [
+        317,
+        740
+      ],
+      "size": [
+        190,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemserver/FourFingerGestureHook.kt",
+          "line": 31,
+          "end_line": 113,
+          "label": "识别请求、确认后取消触摸"
+        }
+      ]
+    },
+    {
+      "id": "video-dock",
+      "type": "backend",
+      "label": "原生视频接入",
+      "sublabel": "保留原窗口 · SurfaceControl",
+      "pos": [
+        644,
+        740
+      ],
+      "size": [
+        210,
+        74
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemserver/ControlAreaVideoController.kt",
+          "line": 163,
+          "end_line": 274,
+          "label": "保持同源嵌入与安全拒绝"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/systemserver/ControlAreaVideoController.kt",
+          "line": 515,
+          "end_line": 556,
+          "label": "原生全屏与画中画迁移"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/lujinxin/nextep/workspace/ControlAreaVideoContract.kt",
+          "line": 85,
+          "end_line": 142,
+          "label": "状态回传与 Binder 归还确认"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "普通 APK 进程",
+      "wraps": [
+        "apk",
+        "config",
+        "energy"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "security-group",
+      "label": "LSPosed：SystemUI 进程",
+      "wraps": [
+        "runtime",
+        "windows",
+        "main",
+        "slots",
+        "video"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "security-group",
+      "label": "LSPosed：负一屏进程",
+      "wraps": [
+        "assistant"
+      ],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "LSPosed：Launcher 进程",
+      "wraps": [
+        "launcher"
+      ],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "LSPosed：分身进程",
+      "wraps": [
+        "multiapp"
+      ],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "LSPosed：system_server",
+      "wraps": [
+        "server",
+        "gesture",
+        "video-dock"
+      ],
+      "pad": 18
+    }
+  ],
+  "connections": [
+    {
+      "id": "entry-apk",
+      "from": "entry",
+      "to": "apk",
+      "label": "控制请求",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gesture-runtime",
+      "from": "entry",
+      "to": "runtime",
+      "label": "状态栏手势",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [
+        [
+          130,
+          24
+        ],
+        [
+          749,
+          24
+        ]
+      ]
+    },
+    {
+      "id": "apk-runtime",
+      "from": "apk",
+      "to": "runtime",
+      "label": "有序广播"
+    },
+    {
+      "id": "entry-config",
+      "from": "entry",
+      "to": "config",
+      "label": "设置界面"
+    },
+    {
+      "id": "runtime-config",
+      "from": "runtime",
+      "to": "config",
+      "label": "Binder 查询"
+    },
+    {
+      "id": "config-runtime",
+      "from": "config",
+      "to": "runtime",
+      "label": "变更通知",
+      "variant": "dashed"
+    },
+    {
+      "id": "runtime-windows",
+      "from": "runtime",
+      "to": "windows",
+      "label": "窗口控制",
+      "variant": "emphasis"
+    },
+    {
+      "id": "runtime-main",
+      "from": "runtime",
+      "to": "main",
+      "label": "主窗呈现"
+    },
+    {
+      "id": "windows-slots",
+      "from": "windows",
+      "to": "slots",
+      "label": "小窗操作"
+    },
+    {
+      "id": "slots-main",
+      "from": "slots",
+      "to": "main",
+      "label": "任务交换"
+    },
+    {
+      "id": "runtime-shared",
+      "from": "runtime",
+      "to": "shared",
+      "label": "发布状态布局"
+    },
+    {
+      "id": "shared-launcher",
+      "from": "shared",
+      "to": "launcher",
+      "label": "状态与布局"
+    },
+    {
+      "id": "shared-assistant",
+      "from": "shared",
+      "to": "assistant",
+      "label": "状态与布局"
+    },
+    {
+      "id": "shared-server",
+      "from": "shared",
+      "to": "server",
+      "label": "读取与监听"
+    },
+    {
+      "id": "apk-launcher",
+      "from": "apk",
+      "to": "launcher",
+      "label": "同步桌面"
+    },
+    {
+      "id": "launcher-runtime",
+      "from": "launcher",
+      "to": "runtime",
+      "label": "启动重定向"
+    },
+    {
+      "id": "slots-android",
+      "from": "slots",
+      "to": "android",
+      "label": "显示与任务"
+    },
+    {
+      "id": "main-android",
+      "from": "main",
+      "to": "android",
+      "label": "任务 Surface"
+    },
+    {
+      "id": "server-android",
+      "from": "server",
+      "to": "android",
+      "label": "兼容策略",
+      "variant": "security"
+    },
+    {
+      "id": "android-multiapp",
+      "from": "android",
+      "to": "multiapp",
+      "label": "标记请求解析"
+    },
+    {
+      "id": "config-energy",
+      "from": "config",
+      "to": "energy",
+      "label": "打开监测"
+    },
+    {
+      "id": "energy-runtime",
+      "from": "energy",
+      "to": "runtime",
+      "label": "只读诊断"
+    },
+    {
+      "id": "energy-android",
+      "from": "energy",
+      "to": "android",
+      "label": "读取电池"
+    },
+    {
+      "id": "entry-four-finger",
+      "from": "entry",
+      "to": "gesture",
+      "label": "四指触摸"
+    },
+    {
+      "id": "four-finger-policy",
+      "from": "gesture",
+      "to": "runtime",
+      "label": "校验后执行",
+      "variant": "security"
+    },
+    {
+      "id": "windows-video",
+      "from": "windows",
+      "to": "video",
+      "label": "视频页面"
+    },
+    {
+      "id": "video-host",
+      "from": "video",
+      "to": "video-dock",
+      "label": "宿主/命令"
+    },
+    {
+      "id": "video-state",
+      "from": "video-dock",
+      "to": "video",
+      "label": "视频状态"
+    },
+    {
+      "id": "video-surface",
+      "from": "video-dock",
+      "to": "android",
+      "label": "Surface",
+      "labelAt": [
+        907,
+        767
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "固定布局与独立转向",
+      "items": [
+        "主应用在 Display 0 呈现；三个小窗使用保留的 VirtualDisplay",
+        "面板以机身坐标固定，首帧投影与原生旋转配合，避免中间缓冲闪烁",
+        "视频画布独立转向；默认完整显示，手动铺满会裁切"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "手势与通信边界",
+      "items": [
+        "四指请求需通过 SystemUI 的开关、游戏、黑名单及屏幕状态校验",
+        "配置、工作区控制、能耗查询和视频能力使用各自的通信与身份校验",
+        "Surface/Binder 是临时宿主能力，不写入 Settings.Global"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "按需诊断与运行开销",
+      "items": [
+        "监测页面离开或锁屏即停采，没有常驻能耗采样服务",
+        "电池净功率属于整机；CPU 读数覆盖共享的 SystemUI 进程",
+        "空闲任务轮询降频，合并刷新，小窗虚拟显示独立请求 60Hz"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "原生所有权与恢复",
+      "items": [
+        "播放器继续负责播放；system_server 只接入并变换原生窗口 Surface",
+        "同一有效来源转屏时保持接入；锁屏、宿主失效或退出时归还原窗口",
+        "借用层级在归还提交确认前保留；原应用自身黑边不自动识别移除"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "功能页与最近任务",
+      "items": [
+        "顶栏滑动切换监测与游戏；监测只在工作区功能页可见时采样",
+        "任务页直接恢复或拖入小窗；后台锁定状态由原生桌面维护"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "跨窗口分享与视频控制",
+      "items": [
+        "内容松手后交换主窗与目标小窗，按接收应用打开分享页",
+        "支持时可拖动视频进度并回到来源应用的全屏播放器"
+      ]
+    }
+  ]
+}
