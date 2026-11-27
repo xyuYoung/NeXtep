@@ -45,6 +45,5 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation("androidx.viewpager:viewpager:1.0.0")
-    implementation("cn.6tail:lunar:1.7.7")
     testImplementation("junit:junit:4.13.2")
 }

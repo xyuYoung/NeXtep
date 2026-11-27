@@ -75,7 +75,6 @@ object SettingsScreen {
                 R.string.language_english, R.string.language_japanese, R.string.language_korean,
             ).map { activity.getString(it) }.toTypedArray()
             val selectedLanguage = AppLanguage.selectedTag(activity)
-            val launcherIconButton = LauncherIconPreference.createButton(activity)
             val keyTriggerKeyCodeButton = createKeyTriggerKeyCodeButton(activity, repository)
             val keyTriggerModeButton = createKeyTriggerModeButton(activity, repository)
             val keyTriggerBlacklistButton = createKeyTriggerBlacklistButton(activity, repository, apps)
@@ -143,13 +142,6 @@ object SettingsScreen {
                     addView(settingRow(activity, activity.getString(R.string.language_title),
                         activity.getString(R.string.language_summary), languageButton).apply {
                         setOnClickListener { languageButton.performClick() }
-                        isFocusable = false
-                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    }, matchWidth())
-                    addView(settingDivider(activity))
-                    addView(settingRow(activity, activity.getString(R.string.launcher_icon_title),
-                        activity.getString(R.string.launcher_icon_summary), launcherIconButton).apply {
-                        setOnClickListener { launcherIconButton.performClick() }
                         isFocusable = false
                         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                     }, matchWidth())

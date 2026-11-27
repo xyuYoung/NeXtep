@@ -49,10 +49,11 @@ internal object WorkspaceKeyTriggerHook {
             override fun intercept(chain: XposedInterface.Chain): Any? {
                 val consume = runCatching {
                     val event = chain.args.getOrNull(0) as? KeyEvent ?: return@runCatching false
+                    val policyFlags = chain.args.getOrNull(1) as? Int ?: 0
                     val context = chain.thisObject?.let { contextField.get(it) as? Context }
                         ?: return@runCatching false
                     SystemServerWorkspaceBridge.startGeometryObservation(context)
-                    handleKeyEvent(context, event)
+                    handleKeyEvent(context, event, policyFlags)
                 }.onFailure { error ->
                     if (failed.compareAndSet(false, true)) {
                         NeXtepLog.warn("key_trigger", "Hardware key interception failed open", error)
@@ -64,12 +65,12 @@ internal object WorkspaceKeyTriggerHook {
         NeXtepLog.info("key_trigger", "Installed PhoneWindowManager hardware key trigger hook")
     }
 
-    private fun handleKeyEvent(context: Context, event: KeyEvent): Boolean {
+    private fun handleKeyEvent(context: Context, event: KeyEvent, policyFlags: Int): Boolean {
         val config = SystemServerWorkspaceBridge.observedKeyTriggerConfig()
         if (!config.enabled || config.keyCode <= 0 || event.keyCode != config.keyCode) {
             return false
         }
-        if ((event.flags and KeyEvent.FLAG_INJECTED) != 0) {
+        if ((policyFlags and POLICY_FLAG_INJECTED) != 0) {
             return false
         }
         if (!isInteractiveAndUnlocked(context)) {
@@ -220,6 +221,7 @@ internal object WorkspaceKeyTriggerHook {
         }
     }
 
+    private const val POLICY_FLAG_INJECTED = 0x01000000
     private const val DOUBLE_PRESS_WINDOW_MS = 350L
     private const val LONG_PRESS_TIMEOUT_MS = 450L
 }
