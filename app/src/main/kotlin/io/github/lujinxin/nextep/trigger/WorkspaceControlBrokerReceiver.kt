@@ -16,7 +16,7 @@ class WorkspaceControlBrokerReceiver : BroadcastReceiver() {
             TriggerBroadcastContract.ACTION_HOST_TOGGLE_REQUEST ->
                 TriggerCoordinator.requestToggle(
                     context,
-                    TriggerSource.TOP_RIGHT_STATUS_BAR_GESTURE,
+                    TriggerSource.EXTERNAL_COMMAND,
                     callback,
                 )
             TriggerBroadcastContract.ACTION_HOST_SET_REQUEST ->

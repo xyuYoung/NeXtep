@@ -207,10 +207,7 @@ class NativeFloatingWindowLayerHooker : XposedInterface.Hooker {
 
     private fun isFloating(task: Any): Boolean {
         val mode = call(task, "getWindowingMode") as? Int
-        if (mode == 5 || mode == 2) return true // Freeform and picture-in-picture.
-        val config = call(task, "getConfiguration") as? Configuration ?: return false
-        val extra = field(config, "mOplusExtraConfiguration") ?: return false
-        return call(extra, "getScenario") in setOf(1, 2)
+        return mode == 5 || mode == 2 // Freeform and picture-in-picture.
     }
 
     private fun isPinned(task: Any): Boolean = call(task, "getWindowingMode") == 2

@@ -37,7 +37,6 @@ class MainActivity : AppCompatActivity() {
         val pages = listOf(
             R.id.settings_scroll to SettingsScreen.create(this, SettingsRepository(this)),
             R.id.advanced_scroll to AdvancedScreen.create(this),
-            R.id.about_scroll to AboutScreen.create(this),
         )
             .map { (pageId, page) -> ScrollView(this).apply {
                 id = pageId

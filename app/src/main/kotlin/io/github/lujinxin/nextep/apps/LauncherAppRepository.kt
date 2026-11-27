@@ -43,14 +43,9 @@ class LauncherAppRepository(private val context: Context) {
             entry(info, packageManager, currentUserId, false, null)?.let { entries[it.key] = it }
         }
         if (!includeProfiles) return entries.values.toList()
-        val multiApp = MultiAppAccess.create()
-        val clones = multiApp?.createdPackages().orEmpty()
-        val cloneLabels = clones.keys.sorted().mapIndexed { index, userId ->
-            userId to if (clones.size == 1) AppLanguage.string(context, R.string.app_clone) else AppLanguage.string(context, R.string.app_clone_number, index + 1)
-        }.toMap()
         val launcherApps = context.getSystemService(LauncherApps::class.java)
         // Standard profiles are queried independently: one inaccessible profile
-        // must not discard the primary catalogue or other clone users.
+        // must not discard the primary catalogue or other user profiles.
         runCatching { launcherApps?.profiles.orEmpty() }.getOrDefault(emptyList()).forEach { user ->
             runCatching { launcherApps?.getActivityList(null, user).orEmpty() }
                 .getOrDefault(emptyList()).forEach profileActivity@ { activity ->
@@ -60,32 +55,14 @@ class LauncherAppRepository(private val context: Context) {
                         if (userId == currentUserId || !info.exported || !info.enabled ||
                             info.packageName == "com.android.stk"
                         ) return@profileActivity
-                        val isClone = userId in clones
                         val component = activity.componentName
-                        val label = displayLabel(activity.label.toString(), userId, isClone,
-                            multiApp?.alias(component.packageName, userId), cloneLabels[userId])
+                        val label = displayLabel(activity.label.toString(), userId, false, null, null)
                         val icon = runCatching { activity.getBadgedIcon(0) }
                             .getOrElse { userBadgedIcon(activity.getIcon(0), packageManager, userId) }
                         val key = appKey(component, userId)
-                        entries[key] = AppEntry(key, component, userId, label, icon, isClone)
+                        entries[key] = AppEntry(key, component, userId, label, icon, false)
                     }
                 }
-        }
-        // ColorOS can omit clone users from LauncherApps.getProfiles(). Its
-        // created-package list is the authority; never list merely clonable apps.
-        clones.forEach { (userId, packages) ->
-            if (userId == currentUserId) return@forEach
-            val userPackageManager = contextForUser(userId)?.packageManager
-            val userActivities = userPackageManager?.let { manager ->
-                runCatching { query(manager) }.getOrNull()
-            }
-            val activities = userActivities ?: primary
-            activities.filter { it.activityInfo?.packageName in packages }.forEach { info ->
-                val manager = if (userActivities != null) checkNotNull(userPackageManager) else packageManager
-                entry(info, manager, userId, true,
-                    multiApp?.alias(checkNotNull(info.activityInfo).packageName, userId), cloneLabels[userId])
-                    ?.let { entries[it.key] = it }
-            }
         }
         return entries.values.toList()
     }
@@ -144,51 +121,6 @@ class LauncherAppRepository(private val context: Context) {
     // overlay would also make SystemUI and the metadata-based settings list differ.
     private fun userBadgedIcon(source: Drawable, manager: PackageManager, userId: Int): Drawable =
         runCatching { manager.getUserBadgedIcon(source, userHandle(userId)) }.getOrDefault(source)
-
-    private class MultiAppAccess(private val manager: Any) {
-        private val type = manager.javaClass
-        private val defaultUserId = runCatching { type.getField("USER_ID_MULTI_APP").getInt(null) }
-            .getOrDefault(999)
-
-        fun createdPackages(): Map<Int, Set<String>> {
-            val users = runCatching {
-                (type.getMethod("getMultiAppUserInfoList").invoke(manager) as? List<*>)
-                    .orEmpty().mapNotNull { info ->
-                        info ?: return@mapNotNull null
-                        runCatching { info.javaClass.getMethod("getId").invoke(info) as Int }.getOrNull()
-                    }
-            }.getOrDefault(emptyList())
-            return (users + defaultUserId).distinct().filter { it in 0..MAX_USER_ID }
-                .associateWith { userId ->
-                    runCatching {
-                        val method = type.methods.firstOrNull { it.name == "getMultiAppList" &&
-                            it.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType!!,
-                                Int::class.javaPrimitiveType!!)) }
-                        val result = if (method != null) method.invoke(manager, 0, userId)
-                        else if (userId == defaultUserId) {
-                            type.getMethod("getMultiAppList", Int::class.javaPrimitiveType!!).invoke(manager, 0)
-                        } else null
-                        (result as? List<*>)?.filterIsInstance<String>()?.toSet().orEmpty()
-                    }.getOrDefault(emptySet())
-                }.filterValues { it.isNotEmpty() }
-        }
-
-        fun alias(packageName: String, userId: Int): String? = runCatching {
-            val method = type.methods.firstOrNull { it.name == "getMultiAppAlias" &&
-                it.parameterTypes.contentEquals(arrayOf(String::class.java, Int::class.javaPrimitiveType!!)) }
-            if (method != null) method.invoke(manager, packageName, userId) as? String
-            else if (userId == defaultUserId) {
-                type.getMethod("getMultiAppAlias", String::class.java).invoke(manager, packageName) as? String
-            } else null
-        }.getOrNull()
-
-        companion object {
-            fun create(): MultiAppAccess? = runCatching {
-                val type = Class.forName("com.oplus.multiapp.OplusMultiAppManager")
-                MultiAppAccess(checkNotNull(type.getMethod("getInstance").invoke(null)))
-            }.getOrNull()
-        }
-    }
 
     companion object {
         private const val PER_USER_RANGE = 100_000

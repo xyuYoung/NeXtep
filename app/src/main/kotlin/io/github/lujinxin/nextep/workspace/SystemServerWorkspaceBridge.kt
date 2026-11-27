@@ -17,12 +17,22 @@ object SystemServerWorkspaceBridge {
     private const val HEIGHT_KEY = "nextep_workspace_screen_height_v1"
     private const val SIDEBAR_SIDE_KEY = "nextep_workspace_sidebar_side_v1"
     private const val GEOMETRY_KEY = "nextep_workspace_geometry_v1"
-    internal const val BLOCK_SYSTEM_DRAG_SHARE_KEY = "nextep_workspace_block_system_drag_share_v1"
     internal const val WINDOW_CORNER_RADIUS_DP_KEY = "nextep_workspace_corner_radius_dp_v1"
+    internal const val KEY_TRIGGER_ENABLED_KEY = "nextep_workspace_key_trigger_enabled_v1"
+    internal const val KEY_TRIGGER_KEYCODE_KEY = "nextep_workspace_key_trigger_keycode_v1"
+    internal const val KEY_TRIGGER_MODE_KEY = "nextep_workspace_key_trigger_mode_v1"
+
+    data class KeyTriggerConfig(
+        val enabled: Boolean = false,
+        val keyCode: Int = io.github.lujinxin.nextep.config.WorkspaceConfigContract.DEFAULT_KEY_TRIGGER_KEYCODE,
+        val mode: String = io.github.lujinxin.nextep.config.WorkspaceConfigContract.KEY_TRIGGER_MODE_SINGLE,
+    )
+
     private val geometryObservationStarted = AtomicBoolean(false)
     @Volatile private var observedGeometry: WorkspaceGeometry? = null
     @Volatile private var observedCornerRadiusDp: Int =
         io.github.lujinxin.nextep.config.WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP
+    @Volatile private var observedKeyTrigger: KeyTriggerConfig = KeyTriggerConfig()
 
     /** Subscribe once in system_server. WM animation callbacks then read only RAM. */
     fun startGeometryObservation(context: Context) {
@@ -35,6 +45,7 @@ object SystemServerWorkspaceBridge {
                 fun refresh() {
                     observedGeometry = readActiveGeometry(context)
                     observedCornerRadiusDp = readWindowCornerRadiusDp(context)
+                    observedKeyTrigger = readKeyTriggerConfig(context)
                 }
                 val observer = object : ContentObserver(handler) {
                     override fun onChange(selfChange: Boolean) = refresh()
@@ -42,6 +53,9 @@ object SystemServerWorkspaceBridge {
                 resolver.registerContentObserver(Settings.Global.getUriFor(ACTIVE_KEY), false, observer)
                 resolver.registerContentObserver(Settings.Global.getUriFor(GEOMETRY_KEY), false, observer)
                 resolver.registerContentObserver(Settings.Global.getUriFor(WINDOW_CORNER_RADIUS_DP_KEY), false, observer)
+                resolver.registerContentObserver(Settings.Global.getUriFor(KEY_TRIGGER_ENABLED_KEY), false, observer)
+                resolver.registerContentObserver(Settings.Global.getUriFor(KEY_TRIGGER_KEYCODE_KEY), false, observer)
+                resolver.registerContentObserver(Settings.Global.getUriFor(KEY_TRIGGER_MODE_KEY), false, observer)
                 refresh()
             }.onFailure {
                 geometryObservationStarted.set(false)
@@ -52,16 +66,45 @@ object SystemServerWorkspaceBridge {
 
     fun observedActiveGeometry(): WorkspaceGeometry? = observedGeometry
 
-    /** Only the injected SystemUI host writes this preference into the privileged bridge. */
-    fun publishBlockSystemDragShare(context: Context, enabled: Boolean) {
+    fun observedKeyTriggerConfig(): KeyTriggerConfig = observedKeyTrigger
+
+    /** Only the injected SystemUI host writes key trigger preferences into the privileged bridge. */
+    fun publishKeyTrigger(context: Context, enabled: Boolean, keyCode: Int, mode: String) {
+        val normalizedCode = io.github.lujinxin.nextep.config.WorkspaceConfigContract
+            .normalizeKeyTriggerKeyCode(keyCode)
+        val normalizedMode = io.github.lujinxin.nextep.config.WorkspaceConfigContract
+            .normalizeKeyTriggerMode(mode)
+        observedKeyTrigger = KeyTriggerConfig(enabled, normalizedCode, normalizedMode)
         runCatching {
             val resolver = context.contentResolver
-            val value = if (enabled) 1 else 0
-            if (Settings.Global.getInt(resolver, BLOCK_SYSTEM_DRAG_SHARE_KEY, -1) != value) {
-                Settings.Global.putInt(resolver, BLOCK_SYSTEM_DRAG_SHARE_KEY, value)
+            val enabledInt = if (enabled) 1 else 0
+            if (Settings.Global.getInt(resolver, KEY_TRIGGER_ENABLED_KEY, -1) != enabledInt) {
+                Settings.Global.putInt(resolver, KEY_TRIGGER_ENABLED_KEY, enabledInt)
             }
-        }.onFailure { NeXtepLog.warn("system_server_bridge", "Unable to publish system drag share preference", it) }
+            if (Settings.Global.getInt(resolver, KEY_TRIGGER_KEYCODE_KEY, -1) != normalizedCode) {
+                Settings.Global.putInt(resolver, KEY_TRIGGER_KEYCODE_KEY, normalizedCode)
+            }
+            if (Settings.Global.getString(resolver, KEY_TRIGGER_MODE_KEY) != normalizedMode) {
+                Settings.Global.putString(resolver, KEY_TRIGGER_MODE_KEY, normalizedMode)
+            }
+        }.onFailure { NeXtepLog.warn("system_server_bridge", "Unable to publish key trigger settings", it) }
     }
+
+    private fun readKeyTriggerConfig(context: Context): KeyTriggerConfig = runCatching {
+        val resolver = context.contentResolver
+        val enabled = Settings.Global.getInt(resolver, KEY_TRIGGER_ENABLED_KEY, 0) == 1
+        val keyCode = io.github.lujinxin.nextep.config.WorkspaceConfigContract.normalizeKeyTriggerKeyCode(
+            Settings.Global.getInt(
+                resolver,
+                KEY_TRIGGER_KEYCODE_KEY,
+                io.github.lujinxin.nextep.config.WorkspaceConfigContract.DEFAULT_KEY_TRIGGER_KEYCODE,
+            ),
+        )
+        val mode = io.github.lujinxin.nextep.config.WorkspaceConfigContract.normalizeKeyTriggerMode(
+            Settings.Global.getString(resolver, KEY_TRIGGER_MODE_KEY),
+        )
+        KeyTriggerConfig(enabled, keyCode, mode)
+    }.getOrDefault(KeyTriggerConfig())
 
     fun publishWindowCornerRadiusDp(context: Context, radiusDp: Int) {
         val normalized = io.github.lujinxin.nextep.config.WorkspaceConfigContract

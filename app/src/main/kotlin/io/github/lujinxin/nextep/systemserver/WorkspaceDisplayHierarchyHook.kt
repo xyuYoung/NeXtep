@@ -134,10 +134,7 @@ internal object WorkspaceDisplayHierarchyHook {
         if (originalMode == 5 || originalMode == 2 || field(change, "mIsAlwaysOnTop") == true) return true
         val container = field(change, "mContainer") ?: return false
         val mode = call(container, "getWindowingMode")
-        if (mode == 5 || mode == 2) return true
-        val config = call(container, "getConfiguration") ?: return false
-        val extra = field(config, "mOplusExtraConfiguration") ?: return false
-        return call(extra, "getScenario") in setOf(1, 2)
+        return mode == 5 || mode == 2
     }
 
     private fun field(target: Any, name: String): Any? =

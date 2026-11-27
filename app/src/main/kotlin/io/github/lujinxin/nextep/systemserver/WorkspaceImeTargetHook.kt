@@ -101,10 +101,7 @@ internal object WorkspaceImeTargetHook {
 
     private fun isFullscreen(window: Any): Boolean {
         val task = call(window, "getTask") ?: return false
-        if (call(task, "getWindowingMode") != 1) return false
-        val configuration = call(task, "getConfiguration") ?: return false
-        val extra = field(configuration, "mOplusExtraConfiguration")
-        return extra == null || call(extra, "getScenario") !in setOf(1, 2)
+        return call(task, "getWindowingMode") == 1
     }
 
     private fun field(target: Any, name: String): Any? =

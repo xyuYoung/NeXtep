@@ -1,16 +1,16 @@
 package io.github.lujinxin.nextep.config
 
-import android.app.StatusBarManager
 import android.content.ClipData
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.Icon
+import android.text.InputType
 import android.text.TextUtils
 import android.view.DragEvent
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
@@ -32,7 +32,6 @@ import io.github.lujinxin.nextep.R
 import io.github.lujinxin.nextep.apps.LauncherAppCatalogContract
 import io.github.lujinxin.nextep.apps.LauncherAppRepository
 import io.github.lujinxin.nextep.monitoring.WorkspaceMetric
-import io.github.lujinxin.nextep.trigger.NeXtepTileService
 
 object SettingsScreen {
     private data class AppOption(
@@ -77,7 +76,9 @@ object SettingsScreen {
             ).map { activity.getString(it) }.toTypedArray()
             val selectedLanguage = AppLanguage.selectedTag(activity)
             val launcherIconButton = LauncherIconPreference.createButton(activity)
-            val fourFingerBlacklistButton = createFourFingerBlacklistButton(activity, repository, apps)
+            val keyTriggerKeyCodeButton = createKeyTriggerKeyCodeButton(activity, repository)
+            val keyTriggerModeButton = createKeyTriggerModeButton(activity, repository)
+            val keyTriggerBlacklistButton = createKeyTriggerBlacklistButton(activity, repository, apps)
             val languageButton = SettingsRowButton.create(activity).apply {
                 text = languageLabels[AppLanguage.languageTags.indexOf(selectedLanguage).coerceAtLeast(0)]
                 contentDescription = activity.getString(R.string.setting_description,
@@ -95,39 +96,49 @@ object SettingsScreen {
                 }
             }
 
-            val addTileButton = SettingsRowButton.create(activity).apply {
-                text = activity.getString(R.string.action_add)
-                contentDescription = activity.getString(R.string.tile_add_description)
-                setOnClickListener {
-                    isEnabled = false
-                    runCatching {
-                        activity.getSystemService(StatusBarManager::class.java)
-                            .requestAddTileService(
-                                ComponentName(activity, NeXtepTileService::class.java),
-                                activity.getString(R.string.app_name),
-                                Icon.createWithResource(activity, R.drawable.ic_nextep_tile),
-                                activity.mainExecutor,
-                            ) { result ->
-                                isEnabled = true
-                                val message = when (result) {
-                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> activity.getString(R.string.tile_added)
-                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> activity.getString(R.string.tile_already_added)
-                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> activity.getString(R.string.tile_not_added)
-                                    else -> activity.getString(R.string.tile_add_unavailable)
-                                }
-                                Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
-                            }
-                    }.onFailure {
-                        isEnabled = true
-                        Toast.makeText(activity, activity.getString(R.string.tile_add_manually), Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-
             addView(sectionCard(activity).apply {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(settingRow(activity, activity.getString(R.string.tile_entry_title), activity.getString(R.string.tile_entry_summary), addTileButton), matchWidth())
+                    addView(settingSwitchRow(
+                        activity,
+                        activity.getString(R.string.key_trigger_enabled_title),
+                        activity.getString(R.string.key_trigger_enabled_summary),
+                        settings.keyTriggerEnabled,
+                        repository::setKeyTriggerEnabled,
+                    ), matchWidth())
+                    addView(settingDivider(activity))
+                    addView(settingRow(
+                        activity,
+                        activity.getString(R.string.key_trigger_keycode_title),
+                        activity.getString(R.string.key_trigger_keycode_summary),
+                        keyTriggerKeyCodeButton,
+                    ).apply {
+                        setOnClickListener { keyTriggerKeyCodeButton.performClick() }
+                        isFocusable = false
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, matchWidth())
+                    addView(settingDivider(activity))
+                    addView(settingRow(
+                        activity,
+                        activity.getString(R.string.key_trigger_mode_title),
+                        activity.getString(R.string.key_trigger_mode_summary),
+                        keyTriggerModeButton,
+                    ).apply {
+                        setOnClickListener { keyTriggerModeButton.performClick() }
+                        isFocusable = false
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, matchWidth())
+                    addView(settingDivider(activity))
+                    addView(settingRow(
+                        activity,
+                        activity.getString(R.string.key_trigger_blacklist_title),
+                        activity.getString(R.string.key_trigger_blacklist_summary),
+                        keyTriggerBlacklistButton,
+                    ).apply {
+                        setOnClickListener { keyTriggerBlacklistButton.performClick() }
+                        isFocusable = false
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, matchWidth())
                     addView(settingDivider(activity))
                     addView(settingRow(activity, activity.getString(R.string.language_title),
                         activity.getString(R.string.language_summary), languageButton).apply {
@@ -145,51 +156,10 @@ object SettingsScreen {
                     addView(settingDivider(activity))
                     addView(settingSwitchRow(
                         activity,
-                        activity.getString(R.string.gesture_title),
-                        activity.getString(R.string.gesture_summary),
-                        settings.statusBarGestureEnabled,
-                        repository::setStatusBarGestureEnabled,
-                    ), matchWidth())
-                    addView(settingDivider(activity))
-                    addView(settingSwitchRow(
-                        activity,
-                        activity.getString(R.string.four_finger_gesture_title),
-                        activity.getString(R.string.four_finger_gesture_summary),
-                        settings.fourFingerGestureEnabled,
-                        repository::setFourFingerGestureEnabled,
-                    ), matchWidth())
-                    addView(settingDivider(activity))
-                    addView(settingSwitchRow(
-                        activity,
-                        activity.getString(R.string.four_finger_block_games_title),
-                        activity.getString(R.string.four_finger_block_games_summary),
-                        settings.fourFingerGestureBlockGames,
-                        repository::setFourFingerGestureBlockGames,
-                    ), matchWidth())
-                    addView(settingDivider(activity))
-                    addView(settingRow(activity,
-                        activity.getString(R.string.four_finger_blacklist_title),
-                        activity.getString(R.string.four_finger_blacklist_summary),
-                        fourFingerBlacklistButton).apply {
-                        setOnClickListener { fourFingerBlacklistButton.performClick() }
-                        isFocusable = false
-                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    }, matchWidth())
-                    addView(settingDivider(activity))
-                    addView(settingSwitchRow(
-                        activity,
                         activity.getString(R.string.background_swipe_title),
                         activity.getString(R.string.background_swipe_summary),
                         settings.slotBackgroundSwipeEnabled,
                         repository::setSlotBackgroundSwipeEnabled,
-                    ), matchWidth())
-                    addView(settingDivider(activity))
-                    addView(settingSwitchRow(
-                        activity,
-                        activity.getString(R.string.block_system_drag_share_title),
-                        activity.getString(R.string.block_system_drag_share_summary),
-                        settings.blockSystemDragShareEnabled,
-                        repository::setBlockSystemDragShareEnabled,
                     ), matchWidth())
                     addView(settingDivider(activity))
                     addView(settingSwitchRow(
@@ -568,20 +538,140 @@ object SettingsScreen {
         }, LinearLayout.LayoutParams(dp(activity, 44), dp(activity, 48)))
     }
 
-    private fun createFourFingerBlacklistButton(
+    private fun createKeyTriggerKeyCodeButton(
+        activity: AppCompatActivity,
+        repository: SettingsRepository,
+    ) = SettingsRowButton.create(activity).apply {
+        fun formatKeyCode(code: Int): String {
+            if (code <= 0) return activity.getString(R.string.key_trigger_keycode_unset)
+            val name = KeyEvent.keyCodeToString(code).removePrefix("KEYCODE_")
+            return "$code · $name"
+        }
+        fun refreshLabel() {
+            val code = repository.topBarSettings().keyTriggerKeyCode
+            text = formatKeyCode(code)
+            contentDescription = activity.getString(
+                R.string.setting_description,
+                activity.getString(R.string.key_trigger_keycode_title),
+                text,
+            )
+        }
+        refreshLabel()
+        setOnClickListener {
+            val wasEnabled = repository.topBarSettings().keyTriggerEnabled
+            if (wasEnabled) repository.setKeyTriggerEnabled(false)
+            val currentCode = repository.topBarSettings().keyTriggerKeyCode
+            val input = TextInputEditText(activity).apply {
+                inputType = InputType.TYPE_CLASS_NUMBER
+                setSingleLine(true)
+                if (currentCode > 0) setText(currentCode.toString())
+                setSelection(text?.length ?: 0)
+            }
+            val detectedLabel = TextView(activity).apply {
+                textSize = 13f
+                setTextColor(SettingsPalette.secondary(activity))
+                text = activity.getString(R.string.key_trigger_keycode_dialog_hint)
+            }
+            val container = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(activity, 24), dp(activity, 12), dp(activity, 24), dp(activity, 4))
+                addView(detectedLabel, matchWidth().apply { bottomMargin = dp(activity, 12) })
+                addView(TextInputLayout(activity).apply {
+                    hint = activity.getString(R.string.key_trigger_keycode_input_hint)
+                    boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+                    val radius = dp(activity, 12).toFloat()
+                    setBoxCornerRadii(radius, radius, radius, radius)
+                    addView(input, matchWidth())
+                }, matchWidth())
+            }
+            val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.key_trigger_keycode_title)
+                .setView(container)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    val parsed = input.text?.toString()?.trim()?.toIntOrNull() ?: 0
+                    repository.setKeyTriggerKeyCode(parsed)
+                    refreshLabel()
+                }
+                .setNegativeButton(R.string.action_cancel, null)
+                .setNeutralButton(R.string.four_finger_blacklist_clear) { _, _ ->
+                    repository.setKeyTriggerKeyCode(0)
+                    refreshLabel()
+                }
+                .setOnDismissListener {
+                    if (wasEnabled) repository.setKeyTriggerEnabled(true)
+                }
+                .create()
+            dialog.setOnKeyListener { _, keyCode, event ->
+                if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_UNKNOWN ||
+                    keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 ||
+                    keyCode == KeyEvent.KEYCODE_DEL || keyCode == KeyEvent.KEYCODE_ENTER
+                ) {
+                    false
+                } else if (event.action == KeyEvent.ACTION_DOWN) {
+                    val normalized = WorkspaceConfigContract.normalizeKeyTriggerKeyCode(keyCode)
+                    input.setText(normalized.toString())
+                    input.setSelection(input.text?.length ?: 0)
+                    detectedLabel.text = activity.getString(
+                        R.string.key_trigger_keycode_detected,
+                        formatKeyCode(normalized),
+                    )
+                    true
+                } else {
+                    true
+                }
+            }
+            dialog.show()
+        }
+    }
+
+    private fun createKeyTriggerModeButton(
+        activity: AppCompatActivity,
+        repository: SettingsRepository,
+    ) = SettingsRowButton.create(activity).apply {
+        val modes = listOf(
+            WorkspaceConfigContract.KEY_TRIGGER_MODE_SINGLE to activity.getString(R.string.key_trigger_mode_single),
+            WorkspaceConfigContract.KEY_TRIGGER_MODE_DOUBLE to activity.getString(R.string.key_trigger_mode_double),
+            WorkspaceConfigContract.KEY_TRIGGER_MODE_LONG to activity.getString(R.string.key_trigger_mode_long),
+        )
+        fun refreshLabel() {
+            val current = repository.topBarSettings().keyTriggerMode
+            text = modes.firstOrNull { it.first == current }?.second ?: modes.first().second
+            contentDescription = activity.getString(
+                R.string.setting_description,
+                activity.getString(R.string.key_trigger_mode_title),
+                text,
+            )
+        }
+        refreshLabel()
+        setOnClickListener {
+            val current = repository.topBarSettings().keyTriggerMode
+            val currentIndex = modes.indexOfFirst { it.first == current }.coerceAtLeast(0)
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.key_trigger_mode_title)
+                .setSingleChoiceItems(modes.map { it.second }.toTypedArray(), currentIndex) { dialog, index ->
+                    dialog.dismiss()
+                    repository.setKeyTriggerMode(modes[index].first)
+                    refreshLabel()
+                }
+                .setNegativeButton(R.string.action_cancel, null)
+                .show()
+        }
+    }
+
+    private fun createKeyTriggerBlacklistButton(
         activity: AppCompatActivity,
         repository: SettingsRepository,
         apps: List<AppOption>,
     ) = SettingsRowButton.create(activity).apply {
         fun refreshLabel() {
             text = activity.getString(R.string.four_finger_blacklist_count,
-                repository.topBarSettings().fourFingerGestureBlacklist.size)
+                repository.topBarSettings().keyTriggerBlacklist.size)
             contentDescription = activity.getString(R.string.setting_description,
-                activity.getString(R.string.four_finger_blacklist_title), text)
+                activity.getString(R.string.key_trigger_blacklist_title), text)
         }
         refreshLabel()
         setOnClickListener {
-            val selectedPackages = repository.topBarSettings().fourFingerGestureBlacklist.toMutableSet()
+            val selectedPackages = repository.topBarSettings().keyTriggerBlacklist.toMutableSet()
             val appsByPackage = linkedMapOf<String, BlacklistOption>()
             apps.forEach { option ->
                 ComponentName.unflattenFromString(option.key.substringAfter('|'))?.packageName?.let { packageName ->
@@ -649,15 +739,15 @@ object SettingsScreen {
                 }
             }
             com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
-                .setTitle(R.string.four_finger_blacklist_title)
+                .setTitle(R.string.key_trigger_blacklist_title)
                 .setAdapter(adapter, null)
                 .setPositiveButton(android.R.string.ok) { _, _ ->
-                    repository.setFourFingerGestureBlacklist(selectedPackages)
+                    repository.setKeyTriggerBlacklist(selectedPackages)
                     refreshLabel()
                 }
                 .setNegativeButton(R.string.action_cancel, null)
                 .setNeutralButton(R.string.four_finger_blacklist_clear) { _, _ ->
-                    repository.setFourFingerGestureBlacklist(emptySet())
+                    repository.setKeyTriggerBlacklist(emptySet())
                     refreshLabel()
                 }
                 .show().listView.itemsCanFocus = true

@@ -89,14 +89,6 @@ internal object WorkspaceTaskSurfaceHook {
 
     private fun fit(task: Any, leash: SurfaceControl, transaction: SurfaceControl.Transaction) {
         if (!leash.isValid || call(task, "getWindowingMode") != 1) return
-        val configuration = call(task, "getConfiguration") ?: return
-        val extra = field(configuration, "mOplusExtraConfiguration")
-        if (extra != null && call(extra, "getScenario") in setOf(1, 2)) {
-            // ColorOS native floating tasks may still report fullscreen windowing mode.
-            promotedTasks.remove(task)
-            slotTasks.remove(task)
-            return
-        }
         val display = call(task, "getDisplayContent") ?: return
         if (slotTasks.containsKey(task) && isSlotDisplay(display)) {
             // The virtual display is already scaled by its TextureView. Applying

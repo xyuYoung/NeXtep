@@ -129,7 +129,6 @@ internal class ControlAreaPager(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         video.setNativeInputAvailable(touchRegion.install())
-        post { SystemUiStatusBarGestureInstaller.install(this) }
     }
 
     override fun onDetachedFromWindow() {

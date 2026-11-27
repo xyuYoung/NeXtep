@@ -159,17 +159,18 @@ class TopAppStripView(
 
     init {
         setBackgroundColor(Color.TRANSPARENT)
+        val topInset = compactStatusBarInset()
         addView(
             LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(8), 0, dp(8), dp(WorkspaceControlMetrics.APP_ICON_BOTTOM_INSET_DP))
                 addView(
-                    header,
-                    LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f),
-                )
-                addView(
                     actionRow(),
                     LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(WorkspaceControlMetrics.ACTION_HEIGHT_DP)),
+                )
+                addView(
+                    header,
+                    LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f),
                 )
                 addView(
                     appScroll,
@@ -177,13 +178,19 @@ class TopAppStripView(
                 )
             },
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
-                topMargin = dp(WorkspaceControlMetrics.STATUS_HEIGHT_DP)
+                topMargin = topInset
             },
         )
         addView(dismissHint, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
-            topMargin = dp(WorkspaceControlMetrics.STATUS_HEIGHT_DP)
+            topMargin = topInset
         })
         updateSideButtons()
+    }
+
+    private fun compactStatusBarInset(): Int {
+        val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBarPx = if (resId > 0) resources.getDimensionPixelSize(resId) else dp(24)
+        return statusBarPx.coerceIn(dp(8), dp(32))
     }
 
     private val configChangedReceiver = object : android.content.BroadcastReceiver() {
@@ -360,6 +367,7 @@ class TopAppStripView(
                     topConfig = config
                     updateTitle()
                     header.setItems(config.monitorItems)
+                    header.visibility = if (config.monitorItems.isEmpty()) View.GONE else View.VISIBLE
                     result?.onSuccess { snapshot ->
                         refreshRetryCount = 0
                         lastRefreshAt = System.currentTimeMillis()

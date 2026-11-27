@@ -41,13 +41,6 @@ internal class WorkspaceMonitorSampler(
     private var lastGpuTraceRequestMs = -5_000L
     private var tracedGpu: Double? = null
     private var tracedGpuAtMs = 0L
-    private val oiface by lazy {
-        runCatching {
-            val type = Class.forName("com.oplus.oiface.OifaceManager")
-            val manager = type.getMethod("getInstance", String::class.java).invoke(null, context.packageName)
-            manager to type.getMethod("getGpuCurrentFreq")
-        }.getOrNull()
-    }
 
     fun read(slots: Bundle?): Map<WorkspaceMetric, String?> {
         val battery = if (selected.any { it in batteryMetrics }) {
@@ -273,13 +266,6 @@ internal class WorkspaceMonitorSampler(
         valid(readNumber("$KGSL/clock_mhz"))?.let { return it }
         valid(readNumber("/sys/kernel/gpu/gpu_clock"))?.let { return it }
         valid(readNumber("$KGSL/devfreq/cur_freq")?.div(1_000_000))?.let { return it }
-        oiface?.let { (manager, method) ->
-            val raw = (runCatching { method.invoke(manager) }.getOrNull() as? Number)?.toDouble()
-            if (raw != null) {
-                // Oiface implementations can expose the clock in different units.
-                (valid(raw) ?: valid(raw / 1_000) ?: valid(raw / 1_000_000))?.let { return it }
-            }
-        }
         val now = SystemClock.elapsedRealtime()
         if (now - lastGpuTraceRequestMs >= 4_000L) {
             lastGpuTraceRequestMs = now

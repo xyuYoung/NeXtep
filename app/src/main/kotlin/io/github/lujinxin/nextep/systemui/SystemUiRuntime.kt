@@ -40,7 +40,7 @@ object SystemUiRuntime {
     private lateinit var mainTaskPresenter: MainTaskPresentationCoordinator
     private lateinit var windowController: NeXtepWindowController
     private lateinit var workspaceController: WorkspaceController
-    private lateinit var fourFingerGestures: FourFingerGestureController
+    private lateinit var taskRepository: io.github.lujinxin.nextep.task.TaskRepository
     private val lifecycleHandler = Handler(Looper.getMainLooper())
     private val configExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "NeXtep-WorkspaceConfig").apply { isDaemon = true }
@@ -74,11 +74,15 @@ object SystemUiRuntime {
                 return@execute
             }
             workspaceConfig = queriedConfig
-            SystemServerWorkspaceBridge.publishBlockSystemDragShare(applicationContext,
-                queriedConfig.blockSystemDragShareEnabled)
             SystemServerWorkspaceBridge.publishWindowCornerRadiusDp(
                 applicationContext,
                 queriedConfig.windowCornerRadiusDp,
+            )
+            SystemServerWorkspaceBridge.publishKeyTrigger(
+                applicationContext,
+                queriedConfig.keyTriggerEnabled,
+                queriedConfig.keyTriggerKeyCode,
+                queriedConfig.keyTriggerMode,
             )
             AppLanguage.updateHostLanguage(queriedConfig.languageTag)
             workspaceConfigReady = true
@@ -91,7 +95,6 @@ object SystemUiRuntime {
                     windowController.setNavigationButtonsEnabled(workspaceConfig.navigationButtonsEnabled)
                     windowController.setWindowCornerRadiusDp(workspaceConfig.windowCornerRadiusDp)
                 }
-                if (::fourFingerGestures.isInitialized) fourFingerGestures.updateConfig(workspaceConfig)
                 if (::workspaceController.isInitialized && workspaceController.isActive() &&
                     !workspaceController.isSuspended()
                 ) {
@@ -100,17 +103,16 @@ object SystemUiRuntime {
             }
             NeXtepLog.info(
                 "workspace_config",
-                "Applied statusBarGesture=${workspaceConfig.statusBarGestureEnabled} " +
+                "Applied keyTriggerEnabled=${workspaceConfig.keyTriggerEnabled} " +
+                    "keyTriggerKeyCode=${workspaceConfig.keyTriggerKeyCode} " +
+                    "keyTriggerMode=${workspaceConfig.keyTriggerMode} " +
                     "slotBackgroundSwipe=${workspaceConfig.slotBackgroundSwipeEnabled} " +
                     "autoMinimizeMain=${workspaceConfig.autoMinimizeMainOnTopAppSwitch} " +
                     "navigationButtons=${workspaceConfig.navigationButtonsEnabled} " +
-                    "blockSystemDragShare=${workspaceConfig.blockSystemDragShareEnabled} " +
                     "windowCornerRadiusDp=${workspaceConfig.windowCornerRadiusDp}",
             )
         }
     }
-
-    fun isStatusBarGestureEnabled(): Boolean = workspaceConfigReady && workspaceConfig.statusBarGestureEnabled
 
     fun shouldAutoMinimizeMainOnTopAppSwitch(): Boolean = workspaceConfig.autoMinimizeMainOnTopAppSwitch
 
@@ -207,6 +209,7 @@ object SystemUiRuntime {
                 workspaceConfig.windowCornerRadiusDp * applicationContext.resources.displayMetrics.density,
             )
             WorkspaceDisplayTransitionHook.initialize(applicationContext)
+            taskRepository = io.github.lujinxin.nextep.task.TaskRepository(applicationContext)
             mainTaskPresenter = MainTaskPresentationCoordinator(applicationContext)
             windowController = NeXtepWindowController(
                 context = applicationContext,
@@ -222,20 +225,13 @@ object SystemUiRuntime {
                 mainTaskPresenter = mainTaskPresenter,
                 onStateChanged = ::updateLockStateObservation,
             )
-            fourFingerGestures = FourFingerGestureController(
-                applicationContext,
-                isWorkspaceActive = ::isWorkspaceActive,
-                visibleSlotTaskIds = windowController::visibleSlotTaskIds,
-                canChangeWorkspace = { !workspaceController.isSuspended() },
-                requestWorkspace = ::setWorkspaceFromFourFingerGesture,
-            )
 
             val filter = IntentFilter().apply {
                 addAction(TriggerBroadcastContract.ACTION_TOGGLE_WORKSPACE)
                 addAction(TriggerBroadcastContract.ACTION_SET_WORKSPACE)
                 addAction(TriggerBroadcastContract.ACTION_QUERY_WORKSPACE)
                 addAction(TriggerBroadcastContract.ACTION_LAUNCH_SLOT_TEST)
-                addAction(TriggerBroadcastContract.ACTION_FOUR_FINGER_WORKSPACE)
+                addAction(TriggerBroadcastContract.ACTION_KEY_TRIGGER_WORKSPACE)
             }
             applicationContext.registerReceiver(
                 controlReceiver,
@@ -346,16 +342,6 @@ object SystemUiRuntime {
         }
     }
 
-    fun toggleWorkspaceFromGesture() {
-        if (!isStatusBarGestureEnabled() || !::workspaceController.isInitialized) return
-        val target = !workspaceController.isActive()
-        if (target && isKeyguardLocked(applicationContext)) return
-        if (workspaceController.setActive(target)) {
-            publishWorkspaceSurfaceState(target)
-            if (!target) WorkspaceStateBridge.requestInactiveFromSystemUi(applicationContext)
-        }
-    }
-
     fun closeWorkspaceFromGesture() {
         if (::workspaceController.isInitialized) {
             workspaceController.setActive(false)
@@ -364,22 +350,33 @@ object SystemUiRuntime {
             TriggerBroadcastContract.systemUiSetIntent(applicationContext, false)?.let { intent ->
                 applicationContext.sendBroadcast(intent)
             }
-            applicationContext.sendBroadcast(
-                TriggerBroadcastContract.assistantScreenSetIntent(applicationContext, false),
-            )
             WorkspaceStateBridge.requestInactiveFromSystemUi(applicationContext)
         }
     }
 
-    private fun setWorkspaceFromFourFingerGesture(active: Boolean) {
-        if (!workspaceConfigReady || !workspaceConfig.fourFingerGestureEnabled ||
-            !::workspaceController.isInitialized || !isScreenReady() || isKeyguardLocked(applicationContext) ||
-            workspaceController.isSuspended() || workspaceController.isActive() == active
-        ) return
-        if (workspaceController.setActive(active)) {
-            publishWorkspaceSurfaceState(active)
-            if (!active) WorkspaceStateBridge.requestInactiveFromSystemUi(applicationContext)
+    private fun handleKeyTrigger(context: Context): Boolean {
+        if (!workspaceConfigReady || !workspaceConfig.keyTriggerEnabled ||
+            workspaceConfig.keyTriggerKeyCode <= 0 || !::workspaceController.isInitialized ||
+            !isScreenReady() || isKeyguardLocked(context) || workspaceController.isSuspended()
+        ) return false
+        val target = !workspaceController.isActive()
+        if (target && isKeyTriggerBlacklisted()) {
+            NeXtepLog.info("key_trigger", "Ignored hardware key trigger for blacklisted foreground app")
+            return false
         }
+        return workspaceController.setActive(target).also { handled ->
+            if (handled) {
+                publishWorkspaceSurfaceState(target)
+                if (!target) WorkspaceStateBridge.requestInactiveFromSystemUi(applicationContext)
+            }
+        }
+    }
+
+    private fun isKeyTriggerBlacklisted(): Boolean {
+        val blacklist = workspaceConfig.keyTriggerBlacklist
+        if (blacklist.isEmpty() || !::taskRepository.isInitialized) return false
+        val foregroundPkg = runCatching { taskRepository.foregroundTask()?.component?.packageName }.getOrNull()
+        return foregroundPkg != null && foregroundPkg in blacklist
     }
 
     private fun publishWorkspaceSurfaceState(active: Boolean) {
@@ -416,9 +413,6 @@ object SystemUiRuntime {
                 )
             }
         }
-        applicationContext.sendBroadcast(
-            TriggerBroadcastContract.assistantScreenSetIntent(applicationContext, active),
-        )
     }
 
     private fun setSidebarSideFromTopBar(side: SidebarSide) {
@@ -504,23 +498,6 @@ object SystemUiRuntime {
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (!isOrderedBroadcast || !::workspaceController.isInitialized) return
-            val shouldCollapseFirst = intent.getStringExtra(
-                TriggerBroadcastContract.EXTRA_SOURCE,
-            ) == io.github.lujinxin.nextep.trigger.TriggerSource.QUICK_SETTINGS_TILE.name &&
-                requestedTarget(intent) == true
-            if (shouldCollapseFirst) {
-                val pendingResult = goAsync()
-                SystemUiPanelCollapser.collapse(context)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    val handled = handleControl(context, intent)
-                    if (handled) {
-                        pendingResult.setResultCode(TriggerBroadcastContract.RESULT_HANDLED)
-                        pendingResult.setResultExtras(responseBundle(pendingResult.getResultExtras(true)))
-                    }
-                    pendingResult.finish()
-                }, PANEL_COLLAPSE_DELAY_MS)
-                return
-            }
             val handled = handleControl(context, intent)
             if (!handled) return
 
@@ -547,12 +524,11 @@ object SystemUiRuntime {
                     workspaceController.isActive())) true
             else if (target && isKeyguardLocked(context)) false
             else workspaceController.setActive(target).also { handled ->
-                // The tile/coordinated path must also restore the separate assistant panel.
                 if (handled) publishWorkspaceSurfaceState(target)
             }
         }
         TriggerBroadcastContract.ACTION_QUERY_WORKSPACE -> true
-        TriggerBroadcastContract.ACTION_FOUR_FINGER_WORKSPACE -> fourFingerGestures.handleRequest(intent)
+        TriggerBroadcastContract.ACTION_KEY_TRIGGER_WORKSPACE -> handleKeyTrigger(context)
         TriggerBroadcastContract.ACTION_LAUNCH_SLOT_TEST -> {
             val active = workspaceController.isActive() || workspaceController.setActive(true)
             active && workspaceController.launchInSlot(

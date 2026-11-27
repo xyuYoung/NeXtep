@@ -17,15 +17,14 @@ class SettingsRepository(private val context: Context) {
         val textFontFamily: String,
         val textSizeSp: Int,
         val textBold: Boolean,
-        val statusBarGestureEnabled: Boolean,
         val slotBackgroundSwipeEnabled: Boolean,
         val autoMinimizeMainOnTopAppSwitch: Boolean,
         val navigationButtonsEnabled: Boolean,
         val swapAnimationDurationMs: Int,
-        val fourFingerGestureEnabled: Boolean = true,
-        val fourFingerGestureBlockGames: Boolean = true,
-        val fourFingerGestureBlacklist: Set<String> = emptySet(),
-        val blockSystemDragShareEnabled: Boolean = WorkspaceConfigContract.DEFAULT_BLOCK_SYSTEM_DRAG_SHARE_ENABLED,
+        val keyTriggerEnabled: Boolean = false,
+        val keyTriggerKeyCode: Int = WorkspaceConfigContract.DEFAULT_KEY_TRIGGER_KEYCODE,
+        val keyTriggerMode: String = WorkspaceConfigContract.KEY_TRIGGER_MODE_SINGLE,
+        val keyTriggerBlacklist: Set<String> = emptySet(),
         val returnAfterSharingEnabled: Boolean = WorkspaceConfigContract.DEFAULT_RETURN_AFTER_SHARING_ENABLED,
         val monitorItems: List<String> = WorkspaceMetric.defaultSlots,
         val monitorHidden: Boolean = false,
@@ -50,19 +49,21 @@ class SettingsRepository(private val context: Context) {
         textSizeSp = preferences.getInt("top_text_size", TopTextStyle.DEFAULT_SIZE_SP)
             .coerceIn(TopTextStyle.MIN_SIZE_SP, TopTextStyle.MAX_SIZE_SP),
         textBold = preferences.getBoolean("top_text_bold", false),
-        statusBarGestureEnabled = preferences.getBoolean("status_bar_gesture_enabled", true),
         slotBackgroundSwipeEnabled = preferences.getBoolean("slot_background_swipe_enabled", true),
         autoMinimizeMainOnTopAppSwitch = preferences.getBoolean("auto_minimize_main_on_top_app_switch", false),
         navigationButtonsEnabled = preferences.getBoolean("navigation_buttons_enabled", false),
         swapAnimationDurationMs = WorkspaceConfigContract.normalizeSwapAnimationDurationMs(
             preferences.getInt(KEY_SWAP_ANIMATION_DURATION_MS, WorkspaceConfigContract.DEFAULT_SWAP_ANIMATION_DURATION_MS),
         ),
-        fourFingerGestureEnabled = preferences.getBoolean(KEY_FOUR_FINGER_GESTURE_ENABLED, true),
-        fourFingerGestureBlockGames = preferences.getBoolean(KEY_FOUR_FINGER_GESTURE_BLOCK_GAMES, true),
-        fourFingerGestureBlacklist = preferences.getStringSet(KEY_FOUR_FINGER_GESTURE_BLACKLIST, emptySet())
+        keyTriggerEnabled = preferences.getBoolean(KEY_TRIGGER_ENABLED, false),
+        keyTriggerKeyCode = WorkspaceConfigContract.normalizeKeyTriggerKeyCode(
+            preferences.getInt(KEY_TRIGGER_KEYCODE, WorkspaceConfigContract.DEFAULT_KEY_TRIGGER_KEYCODE),
+        ),
+        keyTriggerMode = WorkspaceConfigContract.normalizeKeyTriggerMode(
+            preferences.getString(KEY_TRIGGER_MODE, WorkspaceConfigContract.KEY_TRIGGER_MODE_SINGLE),
+        ),
+        keyTriggerBlacklist = preferences.getStringSet(KEY_TRIGGER_BLACKLIST, emptySet())
             .orEmpty().toSet(),
-        blockSystemDragShareEnabled = preferences.getBoolean(KEY_BLOCK_SYSTEM_DRAG_SHARE_ENABLED,
-            WorkspaceConfigContract.DEFAULT_BLOCK_SYSTEM_DRAG_SHARE_ENABLED),
         returnAfterSharingEnabled = preferences.getBoolean(KEY_RETURN_AFTER_SHARING_ENABLED,
             WorkspaceConfigContract.DEFAULT_RETURN_AFTER_SHARING_ENABLED),
         monitorItems = preferences.getString("workspace_monitor_items_v2", null)
@@ -91,18 +92,29 @@ class SettingsRepository(private val context: Context) {
         notifyTopContentChanged()
     }
 
-    fun setFourFingerGestureEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_FOUR_FINGER_GESTURE_ENABLED, enabled).apply()
+    fun setKeyTriggerEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(KEY_TRIGGER_ENABLED, enabled).apply()
         notifyTopContentChanged()
     }
 
-    fun setFourFingerGestureBlockGames(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_FOUR_FINGER_GESTURE_BLOCK_GAMES, enabled).apply()
+    fun setKeyTriggerKeyCode(keyCode: Int) {
+        preferences.edit().putInt(
+            KEY_TRIGGER_KEYCODE,
+            WorkspaceConfigContract.normalizeKeyTriggerKeyCode(keyCode),
+        ).apply()
         notifyTopContentChanged()
     }
 
-    fun setFourFingerGestureBlacklist(packages: Set<String>) {
-        preferences.edit().putStringSet(KEY_FOUR_FINGER_GESTURE_BLACKLIST,
+    fun setKeyTriggerMode(mode: String) {
+        preferences.edit().putString(
+            KEY_TRIGGER_MODE,
+            WorkspaceConfigContract.normalizeKeyTriggerMode(mode),
+        ).apply()
+        notifyTopContentChanged()
+    }
+
+    fun setKeyTriggerBlacklist(packages: Set<String>) {
+        preferences.edit().putStringSet(KEY_TRIGGER_BLACKLIST,
             packages.map(String::trim).filter(String::isNotEmpty).toSet()).apply()
         notifyTopContentChanged()
     }
@@ -118,11 +130,6 @@ class SettingsRepository(private val context: Context) {
         notifyTopContentChanged()
     }
 
-    fun setStatusBarGestureEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean("status_bar_gesture_enabled", enabled).apply()
-        notifyTopContentChanged()
-    }
-
     fun setAutoMinimizeMainOnTopAppSwitch(enabled: Boolean) {
         preferences.edit().putBoolean("auto_minimize_main_on_top_app_switch", enabled).apply()
         notifyTopContentChanged()
@@ -130,11 +137,6 @@ class SettingsRepository(private val context: Context) {
 
     fun setSlotBackgroundSwipeEnabled(enabled: Boolean) {
         preferences.edit().putBoolean("slot_background_swipe_enabled", enabled).apply()
-        notifyTopContentChanged()
-    }
-
-    fun setBlockSystemDragShareEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_BLOCK_SYSTEM_DRAG_SHARE_ENABLED, enabled).apply()
         notifyTopContentChanged()
     }
 
@@ -221,10 +223,10 @@ class SettingsRepository(private val context: Context) {
         const val KEY_TOP_APPS = "top_apps"
         const val KEY_MANUAL_APP_ORDER = "manual_app_order"
         const val KEY_SWAP_ANIMATION_DURATION_MS = "window_swap_animation_duration_ms"
-        const val KEY_FOUR_FINGER_GESTURE_ENABLED = "four_finger_gesture_enabled"
-        const val KEY_FOUR_FINGER_GESTURE_BLOCK_GAMES = "four_finger_gesture_block_games"
-        const val KEY_FOUR_FINGER_GESTURE_BLACKLIST = "four_finger_gesture_blacklist"
-        const val KEY_BLOCK_SYSTEM_DRAG_SHARE_ENABLED = "block_system_drag_share_enabled"
+        const val KEY_TRIGGER_ENABLED = "key_trigger_enabled"
+        const val KEY_TRIGGER_KEYCODE = "key_trigger_keycode"
+        const val KEY_TRIGGER_MODE = "key_trigger_mode"
+        const val KEY_TRIGGER_BLACKLIST = "key_trigger_blacklist"
         const val KEY_RETURN_AFTER_SHARING_ENABLED = "return_after_sharing_enabled"
         const val KEY_WINDOW_CORNER_RADIUS_DP = "window_corner_radius_dp"
         const val DEFAULT_TOP_TITLE = ""

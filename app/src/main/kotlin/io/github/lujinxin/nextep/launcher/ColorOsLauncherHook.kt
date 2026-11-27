@@ -7,30 +7,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.content.res.Configuration
-import android.view.MotionEvent
-import android.view.View
-import android.view.ViewGroup
-import android.view.WindowManager
 import android.os.Process
 import android.os.UserHandle
-import io.github.lujinxin.nextep.logging.NeXtepLog
-import io.github.lujinxin.nextep.systemui.SystemDialogLayoutController
-import io.github.lujinxin.nextep.workspace.SystemServerWorkspaceBridge
-import io.github.lujinxin.nextep.xposed.HookGuard
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
+import io.github.lujinxin.nextep.logging.NeXtepLog
+import io.github.lujinxin.nextep.systemui.SystemDialogLayoutController
+import io.github.lujinxin.nextep.xposed.HookGuard
 import java.lang.reflect.Method
 
 object ColorOsLauncherHook {
-    fun install(module: XposedModule, packageName: String, classLoader: ClassLoader) {
-        if (packageName == "com.android.launcher" || packageName == "com.oplus.launcher") {
-            HookGuard.run("launcher_night_icon") { LauncherNightIconHook.install(module) }
-            HookGuard.run("launcher_live_recents_card") { ColorOsRecentsCardHook.install(module, classLoader) }
-            HookGuard.run("launcher_menu_geometry") { LauncherMenuGeometryController.install(module, classLoader) }
-            HookGuard.run("launcher_shortcut_menu") {
-                LauncherShortcutMenuController.install(module)
-            }
-        }
+    fun install(module: XposedModule, packageName: String, @Suppress("UNUSED_PARAMETER") classLoader: ClassLoader) {
         HookGuard.run("launcher_dialog_layout") {
             Class.forName("android.view.WindowManagerGlobal").declaredMethods
                 .filter { method ->
@@ -47,7 +37,6 @@ object ColorOsLauncherHook {
                                 LauncherPackageResolver.isCurrentHome(view.context)
                             ) {
                                 HookGuard.run("launcher_dialog_layout_apply") {
-                                    LauncherShortcutMenuController.beforeLayout(params)
                                     // Dialogs have their own windows and do not inherit the
                                     // Activity decor transform. Resize the actual window so
                                     // its text, buttons and native input share the same bounds.
@@ -61,73 +50,6 @@ object ColorOsLauncherHook {
                     })
                 }
         }
-        if (packageName == "com.android.launcher") {
-            HookGuard.run("launcher_recent_task_locks") {
-                val locks = ColorOsRecentTaskLocks(classLoader)
-                locks.installObserver(module)
-                LauncherRuntime.recentTaskLocks = locks
-            }
-            HookGuard.run("launcher_recent_task_selection") {
-                val recents = classLoader.loadClass("com.android.quickstep.views.RecentsView")
-                listOf(
-                    recents.getDeclaredMethod("onAttachedToWindow"),
-                    recents.getDeclaredMethod("setOverviewStateEnabled", Boolean::class.javaPrimitiveType),
-                ).forEach { method ->
-                    method.isAccessible = true
-                    module.hook(method).intercept(object : XposedInterface.Hooker {
-                        override fun intercept(chain: XposedInterface.Chain): Any? {
-                            val result = chain.proceed()
-                            (chain.thisObject as? View)?.let(LauncherRecentTaskSelection::observe)
-                            return result
-                        }
-                    })
-                }
-            }
-            ColorOsHomeReturnTargetHook.install(module, classLoader)
-            HookGuard.run("launcher_workspace_home_gesture_animation") {
-                // Gesture HOME uses OplusLauncherSwipeHandlerV2Impl, not liteAppCloseAnim.
-                // Its native light-animation branch disables the floating-icon spring while
-                // retaining the OEM gesture factory, completion callbacks and surface cleanup.
-                // The spring's icon coordinates assume an unscaled Launcher root.
-                val features = classLoader.loadClass("com.android.common.util.AppFeatureUtils")
-                val method = features.getDeclaredMethod("isHomeGestureLightAnimation")
-                check(method.returnType == Boolean::class.javaPrimitiveType) {
-                    "Unexpected ColorOS home-gesture animation signature"
-                }
-                method.isAccessible = true
-                module.hook(method).intercept(object : XposedInterface.Hooker {
-                    override fun intercept(chain: XposedInterface.Chain): Any? {
-                        if (!LauncherTransformController.canUseWorkspaceAnimations()) return chain.proceed()
-                        return true
-                    }
-                })
-                NeXtepLog.info(
-                    "launcher_workspace_home_gesture_animation",
-                    "Native light HOME gesture hook installed",
-                )
-            }
-            HookGuard.run("launcher_workspace_close_animation") {
-                // ColorOS already provides an icon-free animated return for special surfaces.
-                // Its icon spring assumes an unscaled Launcher and is invalid in our workspace.
-                val manager = classLoader.loadClass(
-                    "com.android.launcher3.OplusQuickstepTransitionManagerImpl",
-                )
-                val method = manager.declaredMethods.single {
-                    it.name == "liteAppCloseAnim" && it.returnType == Boolean::class.javaPrimitiveType &&
-                        it.parameterTypes.size == 1 && it.parameterTypes[0].isArray
-                }
-                method.isAccessible = true
-                module.hook(method).intercept(object : XposedInterface.Hooker {
-                    override fun intercept(chain: XposedInterface.Chain): Any? {
-                        if (!LauncherTransformController.canUseWorkspaceAnimations() ||
-                            !LauncherAnimationPolicy.canOverrideClose(chain.args.firstOrNull())
-                        ) return chain.proceed()
-                        NeXtepLog.info("launcher_workspace_close_animation", "Using native light return animation")
-                        return true
-                    }
-                })
-            }
-        }
         HookGuard.run("launcher_hooks") {
             val onPostResume = Activity::class.java.getDeclaredMethod("onPostResume")
             val dispatchTouchEvent = Activity::class.java.getDeclaredMethod(
@@ -138,9 +60,6 @@ object ColorOsLauncherHook {
             dispatchTouchEvent.isAccessible = true
             module.hook(onPostResume).intercept(LauncherLifecycleHooker(module))
             module.hook(dispatchTouchEvent).intercept(LauncherTouchHooker())
-            if (packageName == ASSISTANT_SCREEN_PACKAGE) {
-                installAssistantWindowHooks(module)
-            }
             Instrumentation::class.java.declaredMethods
                 .filter { method ->
                     method.name == "execStartActivity" &&
@@ -163,86 +82,10 @@ object ColorOsLauncherHook {
                         module.hook(method).intercept(LauncherAppsStartHooker())
                     }
             }
-            NeXtepLog.info("launcher_hooks", "Public Activity hooks installed for $packageName")
-        }
-    }
-
-    private fun installAssistantWindowHooks(module: XposedModule) {
-        HookGuard.run("assistant_attach_hook") {
-            val onAttachedToWindow = View::class.java.getDeclaredMethod("onAttachedToWindow")
-            onAttachedToWindow.isAccessible = true
-            module.hook(onAttachedToWindow).intercept(WorkspaceSurfaceAttachHooker())
-        }
-        HookGuard.run("assistant_touch_hook") {
-            val rootDispatchTouch = ViewGroup::class.java.getDeclaredMethod(
-                "dispatchTouchEvent",
-                MotionEvent::class.java,
-            )
-            rootDispatchTouch.isAccessible = true
-            module.hook(rootDispatchTouch).intercept(WorkspaceSurfaceTouchHooker())
-        }
-        HookGuard.run("assistant_window_add_hook") {
-            Class.forName("android.view.WindowManagerGlobal").declaredMethods
-                .filter { method ->
-                    method.name == "addView" &&
-                        method.parameterTypes.firstOrNull() == View::class.java
-                }
-                .forEach { method ->
-                    method.isAccessible = true
-                    module.hook(method).intercept(AssistantWindowAddHooker())
-                }
-        }
-        HookGuard.run("assistant_view_root_hook") {
-            Class.forName("android.view.ViewRootImpl").declaredMethods
-                .filter { method ->
-                    method.name == "setView" &&
-                        method.parameterTypes.firstOrNull() == View::class.java
-                }
-                .forEach { method ->
-                    method.isAccessible = true
-                    module.hook(method).intercept(AssistantViewRootHooker())
-                }
+            NeXtepLog.info("launcher_hooks", "Generic AOSP launcher hooks installed for $packageName")
         }
     }
 }
-
-class AssistantWindowAddHooker : XposedInterface.Hooker {
-    override fun intercept(chain: XposedInterface.Chain): Any? {
-        val view = chain.getArg(0) as? View
-        val result = chain.proceed()
-        view?.post {
-            LauncherRuntime.onWorkspaceSurfaceAttached(view.context)
-            LauncherTransformController.attach(view)
-            LauncherTransformController.setActive(
-                SystemServerWorkspaceBridge.isWorkspaceActive(view.context),
-            )
-        }
-        return result
-    }
-}
-
-class AssistantViewRootHooker : XposedInterface.Hooker {
-    override fun intercept(chain: XposedInterface.Chain): Any? {
-        val view = chain.getArg(0) as? View
-        val result = chain.proceed()
-        if (view != null) {
-            view.post {
-                NeXtepLog.info(
-                    "assistant_root",
-                    "Attached ${view.javaClass.name} size=${view.width}x${view.height}",
-                )
-                LauncherRuntime.onWorkspaceSurfaceAttached(view.context)
-                LauncherTransformController.attach(view)
-                LauncherTransformController.setActive(
-                    SystemServerWorkspaceBridge.isWorkspaceActive(view.context),
-                )
-            }
-        }
-        return result
-    }
-}
-
-private const val ASSISTANT_SCREEN_PACKAGE = "com.coloros.assistantscreen"
 
 class LauncherStartActivityHooker : XposedInterface.Hooker {
     override fun intercept(chain: XposedInterface.Chain): Any? {
@@ -305,9 +148,6 @@ class LauncherLifecycleHooker(private val module: XposedModule) : XposedInterfac
 
     private fun installConfigurationHook(activity: Activity) {
         if (!LauncherPackageResolver.isWorkspaceSurface(activity)) return
-        // ColorOS changes its grid/device profile before calling Activity.super.
-        // Resolve the actual override, including inherited OEM implementations,
-        // before onHomeResumed can apply our first transform to this Activity.
         val method = activity.javaClass.getMethod("onConfigurationChanged", Configuration::class.java)
         if (method in configurationMethods) return
         method.isAccessible = true
@@ -327,43 +167,8 @@ class LauncherLifecycleHooker(private val module: XposedModule) : XposedInterfac
 
 class LauncherTouchHooker : XposedInterface.Hooker {
     override fun intercept(chain: XposedInterface.Chain): Any? {
-        val activity = chain.thisObject as? Activity
-        if (activity != null && LauncherPackageResolver.isAssistantScreen(activity)) {
-            return chain.proceed()
-        }
         val event = chain.getArg(0) as? MotionEvent
         val transform = LauncherTransformController.mapToContent(event)
-        return try {
-            chain.proceed()
-        } finally {
-            LauncherTransformController.mapToScreen(event, transform)
-        }
-    }
-}
-
-class WorkspaceSurfaceAttachHooker : XposedInterface.Hooker {
-    override fun intercept(chain: XposedInterface.Chain): Any? {
-        val view = chain.thisObject as? View
-        val result = chain.proceed()
-        if (view != null && view.rootView === view) {
-            view.post {
-                LauncherRuntime.onWorkspaceSurfaceAttached(view.context)
-                LauncherTransformController.attach(view)
-                LauncherTransformController.setActive(
-                    SystemServerWorkspaceBridge.isWorkspaceActive(view.context),
-                )
-            }
-        }
-        return result
-    }
-}
-
-class WorkspaceSurfaceTouchHooker : XposedInterface.Hooker {
-    override fun intercept(chain: XposedInterface.Chain): Any? {
-        val view = chain.thisObject as? ViewGroup ?: return chain.proceed()
-        if (view.rootView !== view) return chain.proceed()
-        val event = chain.getArg(0) as? MotionEvent
-        val transform = LauncherTransformController.mapToContent(view, event)
         return try {
             chain.proceed()
         } finally {

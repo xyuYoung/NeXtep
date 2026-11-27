@@ -34,7 +34,6 @@ import androidx.core.view.doOnPreDraw
 import io.github.lujinxin.nextep.R
 import io.github.lujinxin.nextep.config.AppLanguage
 import io.github.lujinxin.nextep.logging.NeXtepLog
-import io.github.lujinxin.nextep.workspace.RecentTaskLockContract as LockContract
 import io.github.lujinxin.nextep.workspace.SelectedRecentTask
 import io.github.lujinxin.nextep.workspace.WorkspaceControlMetrics
 import java.util.concurrent.Executors
@@ -90,14 +89,6 @@ internal class RecentTasksView(
         refresh()
     }
     private val observer = RecentTasksObserver(::onTasksChanged, ::onSnapshotChanged)
-    private val updateLocks = Runnable { queryLockStates() }
-    private val lockReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == LockContract.CHANGED && LockContract.isFrom(context, this, LockContract.LAUNCHER)) {
-                scheduleLockQuery()
-            }
-        }
-    }
     private var previewsScheduled = false
     private val previewCallback = Runnable {
         previewsScheduled = false
@@ -275,36 +266,22 @@ internal class RecentTasksView(
         clearRequest = request
         val excluded = excludedTaskIds().toSet()
         worker.submit {
-            val result = runCatching { repository.backgroundTaskTargets(excluded) }
+            val result = runCatching {
+                val targets = repository.backgroundTaskTargets(excluded)
+                val removed = mutableSetOf<SelectedRecentTask>()
+                targets.forEach { target ->
+                    if (repository.closeTask(target).isSuccess) removed.add(target)
+                }
+                removed
+            }
             ui.post {
                 if (clearRequest !== request) return@post
-                result.onSuccess { targets ->
-                    clearBatch(request, targets.chunked(LockContract.MAX_TARGETS).iterator(), mutableSetOf())
+                result.onSuccess { removedTasks ->
+                    finishClear(request, removedTasks, failed = false)
                 }.onFailure {
-                    NeXtepLog.warn("recent_tasks", "Unable to list background tasks to clear", it)
+                    NeXtepLog.warn("recent_tasks", "Unable to clear background tasks", it)
                     finishClear(request, emptySet(), failed = true)
                 }
-            }
-        }
-    }
-
-    private fun clearBatch(
-        request: Any,
-        batches: Iterator<List<SelectedRecentTask>>,
-        removedTasks: MutableSet<SelectedRecentTask>,
-    ) {
-        if (!batches.hasNext()) {
-            finishClear(request, removedTasks, failed = false)
-            return
-        }
-        val batch = batches.next()
-        LockContract.request(context, LockContract.CLEAR, batch) { removed ->
-            if (clearRequest !== request) return@request
-            if (removed == null) {
-                finishClear(request, removedTasks, failed = true)
-            } else {
-                batch.forEachIndexed { index, task -> if (removed[index]) removedTasks.add(task) }
-                clearBatch(request, batches, removedTasks)
             }
         }
     }
@@ -370,10 +347,6 @@ internal class RecentTasksView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        lockReceiverRegistered = runCatching {
-            context.registerReceiver(lockReceiver, IntentFilter(LockContract.CHANGED), LockContract.PERMISSION,
-                ui, Context.RECEIVER_EXPORTED)
-        }.onFailure { NeXtepLog.warn("recent_task_lock", "Unable to observe native lock changes", it) }.isSuccess
         if (worker.isShutdown) worker = newWorker()
         if (workspaceVisible) observer.start()
         if (pageActive && workspaceVisible) startRefreshing()
@@ -381,10 +354,6 @@ internal class RecentTasksView(
 
     override fun onDetachedFromWindow() {
         clearRequest = null
-        if (lockReceiverRegistered) {
-            context.unregisterReceiver(lockReceiver)
-            lockReceiverRegistered = false
-        }
         observer.stop()
         invalidateLoads(clearCards = true)
         worker.shutdownNow()
@@ -625,24 +594,9 @@ internal class RecentTasksView(
         tile.scaleY = 1f
     }
 
-    private fun scheduleLockQuery() {
-        if (!canRefresh()) return
-        removeCallbacks(updateLocks)
-        postDelayed(updateLocks, 100L)
-    }
+    private fun scheduleLockQuery() = Unit
 
-    private fun queryLockStates() {
-        if (!canRefresh() || cards.isEmpty()) return
-        val request = ++lockRequest
-        val targetCards = cards.toList()
-        val targets = targetCards.map { it.entry.task }
-        LockContract.request(context, LockContract.QUERY, targets) { states ->
-            if (states == null || request != lockRequest || !canRefresh()) return@request
-            targetCards.forEachIndexed { index, card ->
-                if (cards.any { it === card } && card.entry.task == targets[index]) card.tile.isLocked = states[index]
-            }
-        }
-    }
+    private fun queryLockStates() = Unit
 
     private fun closeCard(card: Card): Boolean {
         if (!canActOn(card)) return false
@@ -692,17 +646,7 @@ internal class RecentTasksView(
 
     private fun toggleCardLock(card: Card) {
         if (!canActOn(card)) return
-        val request = generation
-        val task = card.entry.task
-        lockRequest++
-        card.actionPending = true
-        LockContract.request(context, LockContract.TOGGLE, listOf(task)) { states ->
-            card.actionPending = false
-            if (!accepts(request)) return@request
-            if (states == null) showActionError(R.string.control_task_lock_failed)
-            else if (cards.any { it === card }) card.tile.isLocked = states.single()
-            scheduleLockQuery()
-        }
+        settleCard(card.tile)
     }
 
     private fun canActOn(card: Card): Boolean = canRefresh() && !isInternalDragActive() && closingCard == null && !clearingTasks && !card.actionPending &&
@@ -716,7 +660,6 @@ internal class RecentTasksView(
         generation++
         layoutRevision++
         lockRequest++
-        removeCallbacks(updateLocks)
         swipingCard = null
         closingCard?.card?.actionPending = false
         closingCard = null

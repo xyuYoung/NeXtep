@@ -16,12 +16,11 @@ object TriggerBroadcastContract {
     const val ACTION_LAUNCH_SLOT_TEST = "io.github.lujinxin.nextep.action.LAUNCH_SLOT_TEST"
     const val ACTION_LAUNCHER_APP_REQUEST = "io.github.lujinxin.nextep.action.LAUNCHER_APP_REQUEST"
     const val ACTION_LAUNCHER_READY = "io.github.lujinxin.nextep.action.LAUNCHER_READY"
-    const val ACTION_FOUR_FINGER_WORKSPACE = "io.github.lujinxin.nextep.action.FOUR_FINGER_WORKSPACE"
+    const val ACTION_KEY_TRIGGER_WORKSPACE = "io.github.lujinxin.nextep.action.KEY_TRIGGER_WORKSPACE"
     const val CONTROL_PERMISSION = "io.github.lujinxin.nextep.permission.CONTROL_WORKSPACE"
     const val EXTRA_SOURCE = "io.github.lujinxin.nextep.extra.TRIGGER_SOURCE"
     const val EXTRA_ACTIVE = "io.github.lujinxin.nextep.extra.WORKSPACE_ACTIVE"
     const val EXTRA_REQUESTED_ACTIVE = "io.github.lujinxin.nextep.extra.REQUESTED_ACTIVE"
-    const val EXTRA_GESTURE_EVENT_TIME = "io.github.lujinxin.nextep.extra.GESTURE_EVENT_TIME"
     const val EXTRA_ONLY_IF_INACTIVE = "io.github.lujinxin.nextep.extra.ONLY_IF_INACTIVE"
     const val EXTRA_HOME_PACKAGE = "io.github.lujinxin.nextep.extra.HOME_PACKAGE"
     const val EXTRA_RUNTIME_PROTOCOL_VERSION = "io.github.lujinxin.nextep.extra.RUNTIME_PROTOCOL_VERSION"
@@ -39,7 +38,6 @@ object TriggerBroadcastContract {
 
     const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     const val MODULE_PACKAGE = "io.github.lujinxin.nextep"
-    const val ASSISTANT_SCREEN_PACKAGE = "com.coloros.assistantscreen"
 
     fun queryIntent(targetPackage: String): Intent =
         targetIntent(ACTION_QUERY_WORKSPACE, targetPackage)
@@ -70,18 +68,6 @@ object TriggerBroadcastContract {
                 .putExtra(EXTRA_REQUESTED_ACTIVE, active)
                 .putExtra(EXTRA_SYSTEMUI_IDENTITY, identity)
         }
-
-    fun assistantScreenSetIntent(context: Context, active: Boolean): Intent {
-        val identity = PendingIntent.getBroadcast(
-            context,
-            2,
-            Intent(ACTION_SYSTEMUI_SET_WORKSPACE).setPackage(context.packageName),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        return targetIntent(ACTION_SYSTEMUI_SET_WORKSPACE, ASSISTANT_SCREEN_PACKAGE)
-            .putExtra(EXTRA_REQUESTED_ACTIVE, active)
-            .putExtra(EXTRA_SYSTEMUI_IDENTITY, identity)
-    }
 
     fun launcherAppRequestIntent(context: Context, launchIntent: Intent): Intent {
         val identity = PendingIntent.getBroadcast(

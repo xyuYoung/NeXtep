@@ -2,5 +2,4 @@
     <item name="configuration_pager" type="id" />
     <item name="settings_scroll" type="id" />
     <item name="advanced_scroll" type="id" />
-    <item name="about_scroll" type="id" />
 </resources>

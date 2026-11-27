@@ -37,7 +37,7 @@ object TopTextStyle {
                 val index = if (file.name.contains("CJK") && file.extension == "ttc") 2
                     else available.firstOrNull { it.file == file }?.ttcIndex ?: 0
                 SystemFont("system:${file.absolutePath}#$index", fallbackFontLabel(file.nameWithoutExtension), file, index)
-            }.sortedWith(compareBy<SystemFont> { if (it.file.name.contains("CJK") || it.file.name.contains("OPPO") || it.file.name.contains("OSans") || it.file.name.contains("Oplus")) 0 else 1 }
+            }.sortedWith(compareBy<SystemFont> { if (it.file.name.contains("CJK")) 0 else 1 }
                 .thenBy { it.label })
     }
     fun families(context: Context): List<Pair<String, String>> {
@@ -49,9 +49,6 @@ object TopTextStyle {
     private fun fontLabel(context: Context, name: String): String = when (name) {
         "NotoSansCJK-Regular" -> context.getString(R.string.font_noto_sans_cjk)
         "NotoSerifCJK-Regular" -> context.getString(R.string.font_noto_serif_cjk)
-        "OSans-RC-Regular" -> context.getString(R.string.font_oppo_chinese)
-        "OSans-Ext-Regular" -> context.getString(R.string.font_oppo_extended)
-        "Oplus-Serif" -> context.getString(R.string.font_coloros_serif)
         "SysSans-Hans-Regular" -> context.getString(R.string.font_system_hans)
         "SysSans-Hant-Regular" -> context.getString(R.string.font_system_hant)
         else -> fallbackFontLabel(name)

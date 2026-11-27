@@ -37,7 +37,6 @@ internal class GlassBottomNavigation(
     private val items = listOf(
         NavigationTab(context, R.string.navigation_settings, R.drawable.ic_navigation_settings),
         NavigationTab(context, R.string.navigation_advanced, R.drawable.ic_navigation_advanced),
-        NavigationTab(context, R.string.navigation_about, R.drawable.ic_navigation_about),
     )
     private val row = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL

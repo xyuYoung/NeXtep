@@ -104,9 +104,6 @@ class WorkspaceController(
             TriggerBroadcastContract.systemUiSetIntent(applicationContext, true)?.let {
                 applicationContext.sendBroadcast(it)
             }
-            applicationContext.sendBroadcast(
-                TriggerBroadcastContract.assistantScreenSetIntent(applicationContext, true),
-            )
             state = WorkspaceState.Active(geometry)
             SystemDialogLayoutController.setGeometry(geometry)
             NeXtepLog.info("workspace", "Sidebar moved side=$side geometry=$geometry")
@@ -145,9 +142,6 @@ class WorkspaceController(
                 TriggerBroadcastContract.systemUiSetIntent(applicationContext, true)?.let {
                     applicationContext.sendBroadcast(it)
                 }
-                applicationContext.sendBroadcast(
-                    TriggerBroadcastContract.assistantScreenSetIntent(applicationContext, true),
-                )
             }
             state = WorkspaceState.Active(geometry)
             SystemDialogLayoutController.setGeometry(geometry)
@@ -169,9 +163,6 @@ class WorkspaceController(
             SystemUiRootTransformController.setActive(true)
             val geometry = windowController.show()
             SystemServerWorkspaceBridge.publish(applicationContext, true, geometry)
-            applicationContext.sendBroadcast(
-                TriggerBroadcastContract.assistantScreenSetIntent(applicationContext, true),
-            )
             state = WorkspaceState.Active(geometry)
             SystemDialogLayoutController.setGeometry(geometry)
             NeXtepLog.info("workspace", "Entered geometry=$geometry")
@@ -179,9 +170,6 @@ class WorkspaceController(
         } catch (error: Throwable) {
             SystemServerWorkspaceBridge.publish(applicationContext, false)
             SystemDialogLayoutController.setGeometry(null)
-            applicationContext.sendBroadcast(
-                TriggerBroadcastContract.assistantScreenSetIntent(applicationContext, false),
-            )
             windowController.hide()
             SystemUiRootTransformController.setActive(false)
             mainTaskPresenter.restoreForeground()

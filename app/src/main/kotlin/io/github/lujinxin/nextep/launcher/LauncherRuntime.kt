@@ -10,18 +10,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
-import io.github.lujinxin.nextep.config.AppLanguage
 import io.github.lujinxin.nextep.framework.TaskInfoCompat
 import io.github.lujinxin.nextep.logging.NeXtepLog
 import io.github.lujinxin.nextep.trigger.TriggerBroadcastContract
 import io.github.lujinxin.nextep.trigger.WorkspaceRecoveryPolicy
-import io.github.lujinxin.nextep.workspace.RecentTaskSelection
-import io.github.lujinxin.nextep.workspace.RecentTaskSelectionContract
 import io.github.lujinxin.nextep.workspace.SystemServerWorkspaceBridge
 import java.util.concurrent.atomic.AtomicBoolean
 
 object LauncherRuntime {
-    internal var recentTaskLocks: ColorOsRecentTaskLocks? = null
     @Volatile private var cachedAppContext: Context? = null
     private val receiverRegistered = AtomicBoolean(false)
     private val systemUiReceiverRegistered = AtomicBoolean(false)
@@ -31,7 +27,6 @@ object LauncherRuntime {
     fun onHomeResumed(activity: Activity) {
         if (!LauncherPackageResolver.isWorkspaceSurface(activity)) return
         cachedAppContext = activity.applicationContext ?: activity
-        LauncherNightIconHook.observe(activity)
         LauncherTransformController.attach(activity)
         LauncherTransformController.setActive(
             SystemServerWorkspaceBridge.isWorkspaceActive(activity),
@@ -41,12 +36,6 @@ object LauncherRuntime {
         if (LauncherPackageResolver.isCurrentHome(activity)) {
             notifySystemUiLauncherReady(activity.applicationContext)
         }
-    }
-
-    fun onWorkspaceSurfaceAttached(context: Context) {
-        if (!LauncherPackageResolver.isWorkspaceSurface(context)) return
-        cachedAppContext = context.applicationContext ?: context
-        registerSystemUiReceiver(context.applicationContext)
     }
 
     private fun notifySystemUiLauncherReady(context: Context) {
@@ -59,14 +48,10 @@ object LauncherRuntime {
 
     private fun registerSystemUiReceiver(context: Context) {
         if (!systemUiReceiverRegistered.compareAndSet(false, true)) return
-        runCatching { recentTaskLocks?.register(context) }
-            .onFailure { NeXtepLog.warn("recent_task_lock", "Unable to register native lock bridge", it) }
         try {
             context.registerReceiver(
                 systemUiControlReceiver,
-                IntentFilter(TriggerBroadcastContract.ACTION_SYSTEMUI_SET_WORKSPACE).apply {
-                    addAction(RecentTaskSelectionContract.ACTION_QUERY)
-                },
+                IntentFilter(TriggerBroadcastContract.ACTION_SYSTEMUI_SET_WORKSPACE),
                 null,
                 Handler(Looper.getMainLooper()),
                 Context.RECEIVER_EXPORTED,
@@ -93,14 +78,6 @@ object LauncherRuntime {
             ?.let { android.content.ComponentName(it.packageName, it.name) }
             ?: return false
         if (component.packageName == context.packageName) return false
-
-        // Desktop search is part of the Launcher's native animation session.
-        // Re-launching it from SystemUI drops the original caller/ActivityOptions,
-        // so a cold SearchHomeActivity cannot complete its animated BACK exit.
-        // Keep that launch intact; the workspace task hooks still fit its surface.
-        if (component.packageName == "com.heytap.quicksearchbox" &&
-            component.className == "com.heytap.quicksearchbox.ui.activity.SearchHomeActivity"
-        ) return false
 
         return runCatching {
             context.sendBroadcast(
@@ -196,30 +173,6 @@ object LauncherRuntime {
 
     private val systemUiControlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == RecentTaskSelectionContract.ACTION_QUERY) {
-                if (!isOrderedBroadcast || !LauncherPackageResolver.isCurrentHome(context)) return
-                val identity = intent.getParcelableExtra(
-                    RecentTaskSelectionContract.EXTRA_IDENTITY, PendingIntent::class.java,
-                )
-                if (identity?.creatorPackage != TriggerBroadcastContract.SYSTEM_UI_PACKAGE) return
-                AppLanguage.updateHostLanguage(intent.getStringExtra(RecentTaskSelectionContract.EXTRA_LANGUAGE_TAG).orEmpty())
-                val extras = Bundle()
-                resultCode = when (val selection = LauncherRecentTaskSelection.selection()) {
-                    RecentTaskSelection.NotVisible -> RecentTaskSelectionContract.RESULT_NOT_VISIBLE
-                    is RecentTaskSelection.Selected -> {
-                        extras.putInt(RecentTaskSelectionContract.EXTRA_TASK_ID, selection.task.taskId)
-                        extras.putInt(RecentTaskSelectionContract.EXTRA_USER_ID, selection.task.userId)
-                        extras.putString(RecentTaskSelectionContract.EXTRA_COMPONENT, selection.task.component.flattenToString())
-                        RecentTaskSelectionContract.RESULT_SELECTED
-                    }
-                    is RecentTaskSelection.Unavailable -> {
-                        extras.putString(RecentTaskSelectionContract.EXTRA_ERROR, selection.message)
-                        RecentTaskSelectionContract.RESULT_UNAVAILABLE
-                    }
-                }
-                setResultExtras(extras)
-                return
-            }
             if (intent.action != TriggerBroadcastContract.ACTION_SYSTEMUI_SET_WORKSPACE) return
             val identity = intent.getParcelableExtra(
                 TriggerBroadcastContract.EXTRA_SYSTEMUI_IDENTITY,
@@ -232,7 +185,6 @@ object LauncherRuntime {
                 )
                 return
             }
-            LauncherTransformController.attachExistingAssistantWindows(context)
             LauncherTransformController.setActive(
                 intent.getBooleanExtra(
                     TriggerBroadcastContract.EXTRA_REQUESTED_ACTIVE,

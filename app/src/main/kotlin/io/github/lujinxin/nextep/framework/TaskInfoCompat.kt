@@ -59,14 +59,7 @@ object TaskInfoCompat {
             methodNames = listOf("getToken"),
         )
 
-        // ColorOS FlexibleWindow keeps WINDOWING_MODE_FULLSCREEN. Confirmed on
-        // PLK110 16.0.10.500: OplusExtraConfiguration.getScenario(), with FlexibleWindowManager
-        // LAUNCH_SCENARIO_FLEXIBLE=1 and LAUNCH_SCENARIO_CANVAS=2. Missing OEM fields on
-        // other ROMs leave the standard windowing-mode checks in charge.
-        val extra = readMember(configuration, listOf("mOplusExtraConfiguration"), emptyList())
-        val scenario = extra?.let { readInt(it, listOf("mScenario"), listOf("getScenario")) }
-        val vendorWindowed = scenario == 1 || scenario == 2
-        return WindowState(displayId, bounds, windowingMode, resizeMode, densityDpi, token, vendorWindowed)
+        return WindowState(displayId, bounds, windowingMode, resizeMode, densityDpi, token, vendorWindowed = false)
     }
 
     fun readUserId(info: ActivityManager.RunningTaskInfo): Int? = readInt(

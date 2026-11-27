@@ -26,16 +26,15 @@ data class WorkspaceTopConfig(
     val textFontFamily: String = TopTextStyle.DEFAULT_FAMILY,
     val textSizeSp: Int = TopTextStyle.DEFAULT_SIZE_SP,
     val textBold: Boolean = false,
-    val statusBarGestureEnabled: Boolean = true,
     val slotBackgroundSwipeEnabled: Boolean = true,
     val autoMinimizeMainOnTopAppSwitch: Boolean = false,
     val navigationButtonsEnabled: Boolean = false,
     val languageTag: String = "",
     val swapAnimationDurationMs: Int = WorkspaceConfigContract.DEFAULT_SWAP_ANIMATION_DURATION_MS,
-    val fourFingerGestureEnabled: Boolean = true,
-    val fourFingerGestureBlockGames: Boolean = true,
-    val fourFingerGestureBlacklist: Set<String> = emptySet(),
-    val blockSystemDragShareEnabled: Boolean = WorkspaceConfigContract.DEFAULT_BLOCK_SYSTEM_DRAG_SHARE_ENABLED,
+    val keyTriggerEnabled: Boolean = false,
+    val keyTriggerKeyCode: Int = WorkspaceConfigContract.DEFAULT_KEY_TRIGGER_KEYCODE,
+    val keyTriggerMode: String = WorkspaceConfigContract.KEY_TRIGGER_MODE_SINGLE,
+    val keyTriggerBlacklist: Set<String> = emptySet(),
     val returnAfterSharingEnabled: Boolean = WorkspaceConfigContract.DEFAULT_RETURN_AFTER_SHARING_ENABLED,
     val monitorItems: List<String> = WorkspaceMetric.defaultSlots,
     val windowCornerRadiusDp: Int = WorkspaceConfigContract.DEFAULT_WINDOW_CORNER_RADIUS_DP,
@@ -56,13 +55,17 @@ object WorkspaceConfigContract {
     const val EXTRA_TEXT_FONT = "io.github.lujinxin.nextep.extra.TOP_TEXT_FONT"
     const val EXTRA_TEXT_SIZE = "io.github.lujinxin.nextep.extra.TOP_TEXT_SIZE"
     const val EXTRA_TEXT_BOLD = "io.github.lujinxin.nextep.extra.TOP_TEXT_BOLD"
-    const val EXTRA_STATUS_BAR_GESTURE_ENABLED = "io.github.lujinxin.nextep.extra.STATUS_BAR_GESTURE_ENABLED"
-    const val EXTRA_FOUR_FINGER_GESTURE_ENABLED = "io.github.lujinxin.nextep.extra.FOUR_FINGER_GESTURE_ENABLED"
-    const val EXTRA_FOUR_FINGER_GESTURE_BLOCK_GAMES = "io.github.lujinxin.nextep.extra.FOUR_FINGER_GESTURE_BLOCK_GAMES"
-    const val EXTRA_FOUR_FINGER_GESTURE_BLACKLIST = "io.github.lujinxin.nextep.extra.FOUR_FINGER_GESTURE_BLACKLIST"
+    const val EXTRA_KEY_TRIGGER_ENABLED = "io.github.lujinxin.nextep.extra.KEY_TRIGGER_ENABLED"
+    const val EXTRA_KEY_TRIGGER_KEYCODE = "io.github.lujinxin.nextep.extra.KEY_TRIGGER_KEYCODE"
+    const val EXTRA_KEY_TRIGGER_MODE = "io.github.lujinxin.nextep.extra.KEY_TRIGGER_MODE"
+    const val EXTRA_KEY_TRIGGER_BLACKLIST = "io.github.lujinxin.nextep.extra.KEY_TRIGGER_BLACKLIST"
+    const val KEY_TRIGGER_MODE_SINGLE = "SINGLE"
+    const val KEY_TRIGGER_MODE_DOUBLE = "DOUBLE"
+    const val KEY_TRIGGER_MODE_LONG = "LONG"
+    const val MIN_KEY_TRIGGER_KEYCODE = 0
+    const val MAX_KEY_TRIGGER_KEYCODE = 1024
+    const val DEFAULT_KEY_TRIGGER_KEYCODE = 0
     const val EXTRA_SLOT_BACKGROUND_SWIPE_ENABLED = "io.github.lujinxin.nextep.extra.SLOT_BACKGROUND_SWIPE_ENABLED"
-    const val EXTRA_BLOCK_SYSTEM_DRAG_SHARE_ENABLED = "io.github.lujinxin.nextep.extra.BLOCK_SYSTEM_DRAG_SHARE_ENABLED"
-    const val DEFAULT_BLOCK_SYSTEM_DRAG_SHARE_ENABLED = true
     const val EXTRA_RETURN_AFTER_SHARING_ENABLED = "io.github.lujinxin.nextep.extra.RETURN_AFTER_SHARING_ENABLED"
     const val DEFAULT_RETURN_AFTER_SHARING_ENABLED = true
     const val EXTRA_AUTO_MINIMIZE_MAIN = "io.github.lujinxin.nextep.extra.AUTO_MINIMIZE_MAIN_ON_TOP_APP_SWITCH"
@@ -83,6 +86,15 @@ object WorkspaceConfigContract {
 
     fun normalizeWindowCornerRadiusDp(radiusDp: Int): Int =
         radiusDp.coerceIn(MIN_WINDOW_CORNER_RADIUS_DP, MAX_WINDOW_CORNER_RADIUS_DP)
+
+    fun normalizeKeyTriggerKeyCode(keyCode: Int): Int =
+        keyCode.coerceIn(MIN_KEY_TRIGGER_KEYCODE, MAX_KEY_TRIGGER_KEYCODE)
+
+    fun normalizeKeyTriggerMode(mode: String?): String = when (mode) {
+        KEY_TRIGGER_MODE_DOUBLE -> KEY_TRIGGER_MODE_DOUBLE
+        KEY_TRIGGER_MODE_LONG -> KEY_TRIGGER_MODE_LONG
+        else -> KEY_TRIGGER_MODE_SINGLE
+    }
 
     fun normalizeSwapAnimationDurationMs(durationMs: Int): Int {
         val clamped = durationMs.coerceIn(MIN_SWAP_ANIMATION_DURATION_MS, MAX_SWAP_ANIMATION_DURATION_MS)
@@ -118,13 +130,12 @@ class WorkspaceConfigReceiver : BroadcastReceiver() {
                 putString(WorkspaceConfigContract.EXTRA_TEXT_FONT, settings.textFontFamily)
                 putInt(WorkspaceConfigContract.EXTRA_TEXT_SIZE, settings.textSizeSp)
                 putBoolean(WorkspaceConfigContract.EXTRA_TEXT_BOLD, settings.textBold)
-                putBoolean(WorkspaceConfigContract.EXTRA_STATUS_BAR_GESTURE_ENABLED, settings.statusBarGestureEnabled)
-                putBoolean(WorkspaceConfigContract.EXTRA_FOUR_FINGER_GESTURE_ENABLED, settings.fourFingerGestureEnabled)
-                putBoolean(WorkspaceConfigContract.EXTRA_FOUR_FINGER_GESTURE_BLOCK_GAMES, settings.fourFingerGestureBlockGames)
-                putStringArrayList(WorkspaceConfigContract.EXTRA_FOUR_FINGER_GESTURE_BLACKLIST,
-                    ArrayList(settings.fourFingerGestureBlacklist.sorted()))
+                putBoolean(WorkspaceConfigContract.EXTRA_KEY_TRIGGER_ENABLED, settings.keyTriggerEnabled)
+                putInt(WorkspaceConfigContract.EXTRA_KEY_TRIGGER_KEYCODE, settings.keyTriggerKeyCode)
+                putString(WorkspaceConfigContract.EXTRA_KEY_TRIGGER_MODE, settings.keyTriggerMode)
+                putStringArrayList(WorkspaceConfigContract.EXTRA_KEY_TRIGGER_BLACKLIST,
+                    ArrayList(settings.keyTriggerBlacklist.sorted()))
                 putBoolean(WorkspaceConfigContract.EXTRA_SLOT_BACKGROUND_SWIPE_ENABLED, settings.slotBackgroundSwipeEnabled)
-                putBoolean(WorkspaceConfigContract.EXTRA_BLOCK_SYSTEM_DRAG_SHARE_ENABLED, settings.blockSystemDragShareEnabled)
                 putBoolean(WorkspaceConfigContract.EXTRA_RETURN_AFTER_SHARING_ENABLED, settings.returnAfterSharingEnabled)
                 putBoolean(WorkspaceConfigContract.EXTRA_AUTO_MINIMIZE_MAIN, settings.autoMinimizeMainOnTopAppSwitch)
                 putBoolean(WorkspaceConfigContract.EXTRA_NAVIGATION_BUTTONS_ENABLED, settings.navigationButtonsEnabled)
@@ -260,25 +271,24 @@ object WorkspaceConfigClient {
             textSizeSp = (extras?.getInt(WorkspaceConfigContract.EXTRA_TEXT_SIZE, TopTextStyle.DEFAULT_SIZE_SP)
                 ?: TopTextStyle.DEFAULT_SIZE_SP).coerceIn(TopTextStyle.MIN_SIZE_SP, TopTextStyle.MAX_SIZE_SP),
             textBold = extras?.getBoolean(WorkspaceConfigContract.EXTRA_TEXT_BOLD, false) ?: false,
-            statusBarGestureEnabled = extras?.getBoolean(
-                WorkspaceConfigContract.EXTRA_STATUS_BAR_GESTURE_ENABLED, true,
-            ) ?: true,
-            fourFingerGestureEnabled = extras.getBoolean(
-                WorkspaceConfigContract.EXTRA_FOUR_FINGER_GESTURE_ENABLED, true,
+            keyTriggerEnabled = extras.getBoolean(
+                WorkspaceConfigContract.EXTRA_KEY_TRIGGER_ENABLED, false,
             ),
-            fourFingerGestureBlockGames = extras.getBoolean(
-                WorkspaceConfigContract.EXTRA_FOUR_FINGER_GESTURE_BLOCK_GAMES, true,
+            keyTriggerKeyCode = WorkspaceConfigContract.normalizeKeyTriggerKeyCode(
+                extras.getInt(
+                    WorkspaceConfigContract.EXTRA_KEY_TRIGGER_KEYCODE,
+                    WorkspaceConfigContract.DEFAULT_KEY_TRIGGER_KEYCODE,
+                ),
             ),
-            fourFingerGestureBlacklist = extras.getStringArrayList(
-                WorkspaceConfigContract.EXTRA_FOUR_FINGER_GESTURE_BLACKLIST,
+            keyTriggerMode = WorkspaceConfigContract.normalizeKeyTriggerMode(
+                extras.getString(WorkspaceConfigContract.EXTRA_KEY_TRIGGER_MODE),
+            ),
+            keyTriggerBlacklist = extras.getStringArrayList(
+                WorkspaceConfigContract.EXTRA_KEY_TRIGGER_BLACKLIST,
             ).orEmpty().filter(String::isNotBlank).toSet(),
             slotBackgroundSwipeEnabled = extras?.getBoolean(
                 WorkspaceConfigContract.EXTRA_SLOT_BACKGROUND_SWIPE_ENABLED, true,
             ) ?: true,
-            blockSystemDragShareEnabled = extras.getBoolean(
-                WorkspaceConfigContract.EXTRA_BLOCK_SYSTEM_DRAG_SHARE_ENABLED,
-                WorkspaceConfigContract.DEFAULT_BLOCK_SYSTEM_DRAG_SHARE_ENABLED,
-            ),
             returnAfterSharingEnabled = extras.getBoolean(
                 WorkspaceConfigContract.EXTRA_RETURN_AFTER_SHARING_ENABLED,
                 WorkspaceConfigContract.DEFAULT_RETURN_AFTER_SHARING_ENABLED,
